@@ -1,0 +1,218 @@
+:root {
+  --bg: #eef1f7;
+  --calculator-bg: #ffffff;
+  --display-bg: #f4f6fb;
+  --text: #1c1f26;
+  --text-muted: #6b7280;
+  --key-bg: #eef0f4;
+  --key-bg-hover: #e2e5ec;
+  --key-text: #1c1f26;
+  --operator-bg: #ff9f43;
+  --operator-bg-hover: #ffb066;
+  --operator-text: #ffffff;
+  --equals-bg: #2f6fed;
+  --equals-bg-hover: #4a82f0;
+  --equals-text: #ffffff;
+  --function-bg: #dfe3ea;
+  --function-bg-hover: #d2d7e0;
+  --shadow: 0 20px 45px rgba(30, 40, 70, 0.12);
+  --border: rgba(0, 0, 0, 0.05);
+}
+
+:root[data-theme="dark"] {
+  --bg: #14161c;
+  --calculator-bg: #1e2028;
+  --display-bg: #181a21;
+  --text: #f4f5f7;
+  --text-muted: #9aa0ac;
+  --key-bg: #2a2d38;
+  --key-bg-hover: #353947;
+  --key-text: #f4f5f7;
+  --operator-bg: #ff9f43;
+  --operator-bg-hover: #ffb066;
+  --operator-text: #1c1f26;
+  --equals-bg: #4a82f0;
+  --equals-bg-hover: #6c99f2;
+  --equals-text: #ffffff;
+  --function-bg: #33374480;
+  --function-bg-hover: #3d4150;
+  --shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+  --border: rgba(255, 255, 255, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  transition: background 0.25s ease;
+  padding: 24px;
+}
+
+.calculator {
+  width: 100%;
+  max-width: 360px;
+  background: var(--calculator-bg);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  padding: 20px;
+  border: 1px solid var(--border);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+.calculator__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.calculator__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.theme-toggle {
+  border: none;
+  background: var(--key-bg);
+  color: var(--key-text);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.theme-toggle:hover {
+  background: var(--key-bg-hover);
+}
+
+.theme-toggle:active {
+  transform: scale(0.92);
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-moon {
+  display: none;
+}
+
+:root[data-theme="dark"] .icon-sun {
+  display: none;
+}
+
+:root[data-theme="dark"] .icon-moon {
+  display: block;
+}
+
+.display {
+  background: var(--display-bg);
+  border-radius: 16px;
+  padding: 22px 18px 16px;
+  margin-bottom: 16px;
+  text-align: right;
+  overflow: hidden;
+  transition: background 0.25s ease;
+}
+
+.display__expression {
+  min-height: 20px;
+  font-size: 14px;
+  color: var(--text-muted);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.display__value {
+  font-size: clamp(32px, 9vw, 44px);
+  font-weight: 600;
+  color: var(--text);
+  overflow-x: auto;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.keys {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.key {
+  border: none;
+  border-radius: 14px;
+  padding: 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--key-bg);
+  color: var(--key-text);
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.key:hover {
+  background: var(--key-bg-hover);
+}
+
+.key:active {
+  transform: scale(0.95);
+}
+
+.key--function {
+  background: var(--function-bg);
+}
+
+.key--function:hover {
+  background: var(--function-bg-hover);
+}
+
+.key--operator {
+  background: var(--operator-bg);
+  color: var(--operator-text);
+}
+
+.key--operator:hover {
+  background: var(--operator-bg-hover);
+}
+
+.key--equals {
+  background: var(--equals-bg);
+  color: var(--equals-text);
+}
+
+.key--equals:hover {
+  background: var(--equals-bg-hover);
+}
+
+.key--zero {
+  grid-column: span 2;
+}
+
+@media (max-width: 380px) {
+  .calculator {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .key {
+    padding: 14px 0;
+    font-size: 16px;
+  }
+}
