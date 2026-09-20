@@ -8,15 +8,18 @@
     "@react-native-community/slider": "^5.2.1",
     "expo": "~57.0.24",
     "expo-font": "^57.0.4",
+    "expo-haptics": "^57.0.3",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-dom": "^19.2.3",
     "react-native": "0.86.3",
+    "react-native-reanimated": "^4.7.0",
     "react-native-svg": "^15.15.5",
     "react-native-web": "^0.21.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "babel-preset-expo": "^57.0.12",
     "typescript": "~6.0.3"
   },
   "scripts": {

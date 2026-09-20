@@ -14,7 +14,7 @@ import CompoundInterestModule from './components/CompoundInterestModule';
 import DataStatisticsModule from './components/DataStatisticsModule';
 import GeometryModule from './components/GeometryModule';
 import ScreenHeader from './components/ScreenHeader';
-import TrigonometryUnitCircle from './components/TrigonometryUnitCircle';
+import TrigonometryGameModule from './components/TrigonometryGameModule';
 import HomeScreen from './screens/HomeScreen';
 import { MODULES, ModuleKey, theme } from './theme';
 
@@ -72,7 +72,7 @@ export default function App() {
           {screen === 'compoundInterest' && <CompoundInterestModule />}
           {screen === 'geometry' && <GeometryModule />}
           {screen === 'statistics' && <DataStatisticsModule />}
-          {screen === 'trigonometry' && <TrigonometryUnitCircle />}
+          {screen === 'trigonometry' && <TrigonometryGameModule />}
           {screen === 'calculus' && <CalculusLimitVisualizer />}
         </ScrollView>
       )}
