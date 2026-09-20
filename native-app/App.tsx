@@ -6,7 +6,7 @@ import {
   Nunito_800ExtraBold,
 } from '@expo-google-fonts/nunito';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
 import ArithmeticModule from './components/ArithmeticModule';
 import CalculusLimitVisualizer from './components/CalculusLimitVisualizer';
@@ -18,8 +18,14 @@ import TrigonometryUnitCircle from './components/TrigonometryUnitCircle';
 import HomeScreen from './screens/HomeScreen';
 import { MODULES, ModuleKey, theme } from './theme';
 
+// Fonts are a visual nicety, not something the app should ever hang on.
+// If loading fails (or just never resolves, e.g. a blocked/slow asset host)
+// we fall back to system fonts after a short grace period instead of
+// spinning forever.
+const FONT_TIMEOUT_MS = 4000;
+
 export default function App() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Fredoka_600SemiBold,
     Fredoka_700Bold,
     Nunito_400Regular,
@@ -27,9 +33,17 @@ export default function App() {
     Nunito_700Bold,
     Nunito_800ExtraBold,
   });
+  const [timedOut, setTimedOut] = useState(false);
   const [screen, setScreen] = useState<ModuleKey | 'home'>('home');
 
-  if (!fontsLoaded) {
+  useEffect(() => {
+    const timer = setTimeout(() => setTimedOut(true), FONT_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const ready = fontsLoaded || !!fontError || timedOut;
+
+  if (!ready) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={theme.color.coral} size="large" />
