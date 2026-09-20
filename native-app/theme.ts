@@ -23,6 +23,8 @@ export const theme = {
     mintDark: '#17B586',
     grape: '#8C6BFF',
     grapeDark: '#6E4EE0',
+    tangerine: '#FF9F45',
+    tangerineDark: '#E8801C',
   },
   font: {
     display: 'Fredoka_700Bold',
@@ -41,7 +43,7 @@ export const theme = {
   spacing: (multiplier: number) => multiplier * 4,
 };
 
-export type ModuleKey = 'statistics' | 'trigonometry' | 'calculus';
+export type ModuleKey = 'arithmetic' | 'compoundInterest' | 'geometry' | 'statistics' | 'trigonometry' | 'calculus';
 
 export interface ModuleMeta {
   key: ModuleKey;
@@ -53,6 +55,30 @@ export interface ModuleMeta {
 }
 
 export const MODULES: ModuleMeta[] = [
+  {
+    key: 'arithmetic',
+    title: 'Number Ninja',
+    blurb: 'Slice through +, −, ×, ÷ combos',
+    emoji: '🥷',
+    accent: theme.color.tangerine,
+    accentDark: theme.color.tangerineDark,
+  },
+  {
+    key: 'compoundInterest',
+    title: 'Money Grower',
+    blurb: 'Watch compound interest snowball your cash',
+    emoji: '🌱',
+    accent: theme.color.sunshine,
+    accentDark: theme.color.sunshineDark,
+  },
+  {
+    key: 'geometry',
+    title: 'Shape Architect',
+    blurb: 'Build shapes and unlock area & perimeter',
+    emoji: '📐',
+    accent: theme.color.grape,
+    accentDark: theme.color.grapeDark,
+  },
   {
     key: 'statistics',
     title: 'Data Detective',
