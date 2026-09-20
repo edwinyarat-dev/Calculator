@@ -1,17 +1,22 @@
 {
   "expo": {
-    "name": "native-app",
-    "slug": "native-app",
+    "name": "MathQuest",
+    "slug": "mathquest",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "backgroundColor": "#FFF8F0",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.edwinyarat.mathquest",
+      "buildNumber": "1.0.0"
     },
     "android": {
+      "package": "com.edwinyarat.mathquest",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FF9F45",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
