@@ -2,19 +2,19 @@ import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
+import { theme } from '../theme';
 
 const COLORS = {
-  background: '#FFFFFF',
-  surface: '#F4F6FA',
-  border: '#DCE1EA',
-  text: '#1B1E27',
-  textMuted: '#6B7280',
+  surface: theme.color.surface,
+  border: theme.color.border,
+  text: theme.color.text,
+  textMuted: theme.color.textMuted,
   axis: '#9AA1B2',
   grid: '#E7EAF1',
-  curve: '#2F6FED',
-  pointA: '#1B1E27',
-  secant: '#F5871F',
-  pointB: '#F5871F',
+  curve: theme.color.text, // the given function — fixed, neutral
+  pointA: theme.color.text, // fixed reference point — neutral
+  secant: theme.color.coral, // the module's accent — the dynamic, interactive line
+  pointB: theme.color.coral,
 };
 
 const CHART_W = 320;
@@ -108,7 +108,7 @@ function LimitDiagram({ h }: DiagramProps) {
       </SvgText>
 
       {/* point B, slides toward A as h shrinks */}
-      <Circle cx={scaleX(xB)} cy={scaleY(yB)} r={6} fill={COLORS.pointB} />
+      <Circle cx={scaleX(xB)} cy={scaleY(yB)} r={7} fill={COLORS.pointB} />
       <SvgText x={scaleX(xB) + 8} y={scaleY(yB) - 10} fontSize={12} fontWeight="bold" fill={COLORS.pointB}>
         B
       </SvgText>
@@ -129,9 +129,7 @@ export default function CalculusLimitVisualizer() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Limits &amp; the Secant Line</Text>
-      <Text style={styles.subheading}>Slide h toward 0 to watch the secant line become the tangent at x = 1.</Text>
-
+      <Text style={styles.sectionLabel}>Squeeze h toward 0</Text>
       <View style={styles.readoutRow}>
         <Text style={styles.readoutLabel}>h =</Text>
         <Text style={styles.readoutValue}>{formatFloat(h, 2)}</Text>
@@ -180,7 +178,7 @@ export default function CalculusLimitVisualizer() {
         </View>
         <Text style={[styles.hint, isNearTangent && styles.hintActive]}>
           {isNearTangent
-            ? 'h is nearly 0 — the secant line is now almost indistinguishable from the tangent line.'
+            ? '🎉 h is nearly 0 — the secant line is now almost indistinguishable from the tangent line.'
             : 'As h → 0, the secant slope (2 + h) approaches 2 — the derivative of x² at x = 1.'}
         </Text>
       </View>
@@ -190,19 +188,7 @@ export default function CalculusLimitVisualizer() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
-    backgroundColor: COLORS.background,
-  },
-  heading: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  subheading: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    marginTop: 2,
-    marginBottom: 14,
+    padding: 18,
   },
   readoutRow: {
     flexDirection: 'row',
@@ -214,11 +200,11 @@ const styles = StyleSheet.create({
   readoutLabel: {
     fontSize: 18,
     color: COLORS.textMuted,
-    fontWeight: '600',
+    fontFamily: theme.font.bodyBold,
   },
   readoutValue: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 26,
+    fontFamily: theme.font.display,
     color: COLORS.text,
     fontVariant: ['tabular-nums'],
   },
@@ -235,31 +221,32 @@ const styles = StyleSheet.create({
   },
   tickLabel: {
     fontSize: 11,
+    fontFamily: theme.font.bodySemi,
     color: COLORS.textMuted,
   },
   chartCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    borderWidth: 2,
     borderColor: COLORS.border,
     alignItems: 'center',
     paddingVertical: 8,
   },
   sectionLabel: {
-    marginTop: 18,
-    marginBottom: 8,
-    fontSize: 12,
-    fontWeight: '700',
+    marginTop: 20,
+    marginBottom: 10,
+    fontSize: 13,
+    fontFamily: theme.font.bodyExtraBold,
     letterSpacing: 0.4,
     textTransform: 'uppercase',
     color: COLORS.textMuted,
   },
   breakdown: {
     backgroundColor: COLORS.surface,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    borderWidth: 2,
     borderColor: COLORS.border,
-    padding: 14,
+    padding: 16,
     gap: 10,
   },
   breakdownRow: {
@@ -269,23 +256,24 @@ const styles = StyleSheet.create({
   },
   breakdownLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme.font.bodyBold,
     color: COLORS.text,
   },
   breakdownValue: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 17,
+    fontFamily: theme.font.display,
     color: COLORS.text,
     fontVariant: ['tabular-nums'],
   },
   hint: {
     marginTop: 4,
     fontSize: 12.5,
+    fontFamily: theme.font.body,
     color: COLORS.textMuted,
     lineHeight: 18,
   },
   hintActive: {
     color: COLORS.secant,
-    fontWeight: '600',
+    fontFamily: theme.font.bodyBold,
   },
 });

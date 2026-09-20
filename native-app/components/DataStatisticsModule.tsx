@@ -2,17 +2,22 @@ import React, { useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
 import { computeStats, parseNumberList } from '../utils/statistics';
+import { theme } from '../theme';
+
+// The median highlight is a deliberate, fixed "blue accent" — it's the taught
+// concept (which number IS the median), not decorative chrome, so it stays
+// constant even as the surrounding theme changes.
+const BLUE_ACCENT = '#2F6FED';
+const BLUE_ACCENT_SOFT = '#E3EAFD';
 
 const COLORS = {
-  background: '#FFFFFF',
-  surface: '#F4F6FA',
-  border: '#DCE1EA',
-  text: '#1B1E27',
-  textMuted: '#6B7280',
-  blueAccent: '#2F6FED',
-  blueAccentSoft: '#E3EAFD',
-  boxFill: '#EEF1F8',
-  boxStroke: '#8993A8',
+  surface: theme.color.surface,
+  surfaceMuted: theme.color.surfaceMuted,
+  border: theme.color.border,
+  text: theme.color.text,
+  textMuted: theme.color.textMuted,
+  boxFill: '#EAF9F2',
+  boxStroke: theme.color.mintDark,
 };
 
 const KEYPAD_ROWS: string[][] = [
@@ -84,7 +89,7 @@ function BoxPlot({ min, q1, median, q3, max, medianHighlighted }: BoxPlotProps) 
           y={BOX_TOP - 4}
           width={8}
           height={BOX_BOTTOM - BOX_TOP + 8}
-          fill={COLORS.blueAccent}
+          fill={BLUE_ACCENT}
           opacity={0.18}
           rx={3}
         />
@@ -95,7 +100,7 @@ function BoxPlot({ min, q1, median, q3, max, medianHighlighted }: BoxPlotProps) 
         y1={BOX_TOP}
         x2={xMedian}
         y2={BOX_BOTTOM}
-        stroke={medianHighlighted ? COLORS.blueAccent : COLORS.boxStroke}
+        stroke={medianHighlighted ? BLUE_ACCENT : COLORS.boxStroke}
         strokeWidth={medianHighlighted ? 4 : 2}
       />
       {/* value labels */}
@@ -110,7 +115,7 @@ function BoxPlot({ min, q1, median, q3, max, medianHighlighted }: BoxPlotProps) 
         y={BOX_TOP - 10}
         fontSize={11}
         fontWeight={medianHighlighted ? 'bold' : 'normal'}
-        fill={medianHighlighted ? COLORS.blueAccent : COLORS.textMuted}
+        fill={medianHighlighted ? BLUE_ACCENT : COLORS.textMuted}
         textAnchor="middle"
       >
         {formatNumber(median)}
@@ -145,9 +150,7 @@ export default function DataStatisticsModule() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Data Statistics</Text>
-      <Text style={styles.subheading}>Enter a list of numbers to explore mean, median, and mode.</Text>
-
+      <Text style={styles.sectionLabel}>Type your numbers</Text>
       <TextInput
         style={styles.input}
         value={rawText}
@@ -203,12 +206,12 @@ export default function DataStatisticsModule() {
 
             <Pressable
               onPress={() => setMedianHighlighted((prev) => !prev)}
-              style={styles.statItem}
+              style={({ pressed }) => [styles.statItem, pressed && styles.statItemPressed]}
               accessibilityRole="button"
               accessibilityLabel="Highlight median"
               accessibilityState={{ selected: medianHighlighted }}
             >
-              <Text style={[styles.statLabel, medianHighlighted && styles.statLabelHighlighted]}>Median</Text>
+              <Text style={[styles.statLabel, medianHighlighted && styles.statLabelHighlighted]}>Median 👆</Text>
               <Text style={[styles.statValue, medianHighlighted && styles.statValueHighlighted]}>
                 {formatNumber(stats.median)}
               </Text>
@@ -241,65 +244,56 @@ export default function DataStatisticsModule() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
-    backgroundColor: COLORS.background,
-  },
-  heading: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  subheading: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    marginTop: 2,
-    marginBottom: 14,
+    padding: 18,
   },
   input: {
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: COLORS.border,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     fontSize: 16,
+    fontFamily: theme.font.bodyBold,
     color: COLORS.text,
   },
   warning: {
     fontSize: 12,
-    color: '#B45309',
+    fontFamily: theme.font.bodySemi,
+    color: theme.color.coralDark,
     marginTop: 6,
   },
   keypad: {
-    marginTop: 12,
-    gap: 8,
+    marginTop: 14,
+    gap: 10,
   },
   keypadRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
   key: {
     flex: 1,
     backgroundColor: COLORS.surface,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: COLORS.border,
-    borderRadius: 10,
-    paddingVertical: 12,
+    borderRadius: theme.radius.sm,
+    paddingVertical: 14,
     alignItems: 'center',
   },
   keyPressed: {
-    backgroundColor: COLORS.border,
+    backgroundColor: COLORS.surfaceMuted,
+    transform: [{ scale: 0.96 }],
   },
   keyLabel: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontFamily: theme.font.bodyExtraBold,
     color: COLORS.text,
   },
   sectionLabel: {
-    marginTop: 18,
-    marginBottom: 8,
-    fontSize: 12,
-    fontWeight: '700',
+    marginTop: 20,
+    marginBottom: 10,
+    fontSize: 13,
+    fontFamily: theme.font.bodyExtraBold,
     letterSpacing: 0.4,
     textTransform: 'uppercase',
     color: COLORS.textMuted,
@@ -311,70 +305,74 @@ const styles = StyleSheet.create({
   },
   emptyHint: {
     fontSize: 13,
+    fontFamily: theme.font.body,
     color: COLORS.textMuted,
     fontStyle: 'italic',
   },
   chip: {
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: COLORS.border,
     backgroundColor: COLORS.surface,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
   },
   chipHighlighted: {
-    borderColor: COLORS.blueAccent,
-    backgroundColor: COLORS.blueAccentSoft,
+    borderColor: BLUE_ACCENT,
+    backgroundColor: BLUE_ACCENT_SOFT,
   },
   chipText: {
     fontSize: 14,
+    fontFamily: theme.font.bodyBold,
     color: COLORS.text,
     fontVariant: ['tabular-nums'],
   },
   chipTextHighlighted: {
-    color: COLORS.blueAccent,
-    fontWeight: '700',
+    color: BLUE_ACCENT,
   },
   statsRow: {
     flexDirection: 'row',
-    marginTop: 18,
+    marginTop: 20,
     backgroundColor: COLORS.surface,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    borderWidth: 2,
     borderColor: COLORS.border,
     overflow: 'hidden',
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 16,
+  },
+  statItemPressed: {
+    backgroundColor: BLUE_ACCENT_SOFT,
   },
   statLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: theme.font.bodyExtraBold,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
     color: COLORS.textMuted,
   },
   statLabelHighlighted: {
-    color: COLORS.blueAccent,
+    color: BLUE_ACCENT,
   },
   statValue: {
     marginTop: 4,
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 19,
+    fontFamily: theme.font.display,
     color: COLORS.text,
     fontVariant: ['tabular-nums'],
   },
   statValueHighlighted: {
-    color: COLORS.blueAccent,
+    color: BLUE_ACCENT,
   },
   chartCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    borderWidth: 2,
     borderColor: COLORS.border,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 4,
     alignItems: 'center',
   },

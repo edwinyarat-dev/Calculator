@@ -2,19 +2,19 @@ import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
+import { theme } from '../theme';
 
 const COLORS = {
-  background: '#FFFFFF',
-  surface: '#F4F6FA',
-  border: '#DCE1EA',
-  text: '#1B1E27',
-  textMuted: '#6B7280',
+  surface: theme.color.surface,
+  border: theme.color.border,
+  text: theme.color.text,
+  textMuted: theme.color.textMuted,
   axis: '#9AA1B2',
   grid: '#E7EAF1',
   circleStroke: '#4B5568',
-  arm: '#2F6FED',
-  sin: '#F5871F', // orange — tracks sin(theta) on the Y-axis
-  cos: '#1F9D55', // green — tracks cos(theta) on the X-axis
+  arm: theme.color.sky, // the module's own accent — sweeps the arm
+  sin: '#F5871F', // orange — tracks sin(theta) on the Y-axis (fixed, taught concept)
+  cos: '#1F9D55', // green — tracks cos(theta) on the X-axis (fixed, taught concept)
   dashed: '#B7BDCB',
 };
 
@@ -79,7 +79,7 @@ function UnitCircleDiagram({ degrees, sinValue, cosValue }: UnitCircleProps) {
 
       {/* interactive vector arm, sweeps as the slider changes */}
       <Line x1={originX} y1={originY} x2={tipX} y2={tipY} stroke={COLORS.arm} strokeWidth={3} strokeLinecap="round" />
-      <Circle cx={tipX} cy={tipY} r={6} fill={COLORS.arm} />
+      <Circle cx={tipX} cy={tipY} r={7} fill={COLORS.arm} />
 
       <SvgText x={CENTER + (tipX - originX) / 2} y={originY - 8} fontSize={11} fontWeight="bold" fill={COLORS.cos} textAnchor="middle">
         cos θ
@@ -101,9 +101,7 @@ export default function TrigonometryUnitCircle() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Unit Circle</Text>
-      <Text style={styles.subheading}>Drag the slider to sweep the angle around the circle.</Text>
-
+      <Text style={styles.sectionLabel}>Spin it!</Text>
       <View style={styles.readoutRow}>
         <Text style={styles.readoutValue}>{Math.round(degrees)}°</Text>
         <Text style={styles.readoutDivider}>·</Text>
@@ -159,19 +157,7 @@ export default function TrigonometryUnitCircle() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
-    backgroundColor: COLORS.background,
-  },
-  heading: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  subheading: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    marginTop: 2,
-    marginBottom: 14,
+    padding: 18,
   },
   readoutRow: {
     flexDirection: 'row',
@@ -181,8 +167,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   readoutValue: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 26,
+    fontFamily: theme.font.display,
     color: COLORS.text,
     fontVariant: ['tabular-nums'],
   },
@@ -203,31 +189,32 @@ const styles = StyleSheet.create({
   },
   tickLabel: {
     fontSize: 11,
+    fontFamily: theme.font.bodySemi,
     color: COLORS.textMuted,
   },
   chartCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    borderWidth: 2,
     borderColor: COLORS.border,
     alignItems: 'center',
     paddingVertical: 8,
   },
   sectionLabel: {
-    marginTop: 18,
-    marginBottom: 8,
-    fontSize: 12,
-    fontWeight: '700',
+    marginTop: 20,
+    marginBottom: 10,
+    fontSize: 13,
+    fontFamily: theme.font.bodyExtraBold,
     letterSpacing: 0.4,
     textTransform: 'uppercase',
     color: COLORS.textMuted,
   },
   breakdown: {
     backgroundColor: COLORS.surface,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: theme.radius.lg,
+    borderWidth: 2,
     borderColor: COLORS.border,
-    padding: 14,
+    padding: 16,
     gap: 10,
   },
   breakdownRow: {
@@ -237,12 +224,12 @@ const styles = StyleSheet.create({
   },
   breakdownLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme.font.bodyBold,
     color: COLORS.text,
   },
   breakdownValue: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 17,
+    fontFamily: theme.font.display,
     color: COLORS.text,
     fontVariant: ['tabular-nums'],
   },
