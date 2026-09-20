@@ -1,7 +1,20 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line, Path } from 'react-native-svg';
 import { theme } from '../theme';
+
+// The keypad lives in its own dark "dojo" panel — a deliberate departure from
+// a plain light grid, so this reads as Number Ninja's own tool rather than a
+// reskinned system calculator. The lesson content below stays on the app's
+// normal light surface for readability.
+const DOJO = {
+  panel: '#241B3A',
+  panelBorder: 'rgba(255, 159, 69, 0.35)',
+  tile: '#332A52',
+  tileBorder: 'rgba(255, 255, 255, 0.08)',
+  textOnDark: '#FFFFFF',
+  mutedOnDark: 'rgba(255, 255, 255, 0.55)',
+};
 
 const COLORS = {
   surface: theme.color.surface,
@@ -41,6 +54,52 @@ interface Step {
   value: number;
 }
 
+type KeyVariant = 'digit' | 'fn' | 'operator' | 'equals';
+
+interface CalcKeyProps {
+  label: string;
+  onPress: () => void;
+  variant: KeyVariant;
+  wide?: boolean;
+}
+
+// Every tap gets a quick "slash" — a scale-down plus a slight rotate that
+// springs back — instead of a flat color-swap, so the keypad feels alive.
+function CalcKey({ label, onPress, variant, wide }: CalcKeyProps) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+
+  function pressIn() {
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 0.88, useNativeDriver: false, speed: 40, bounciness: 6 }),
+      Animated.timing(rotate, { toValue: 1, duration: 70, useNativeDriver: false }),
+    ]).start();
+  }
+  function pressOut() {
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, useNativeDriver: false, speed: 14, bounciness: 10 }),
+      Animated.timing(rotate, { toValue: 0, duration: 140, useNativeDriver: false }),
+    ]).start();
+  }
+
+  const rotateDeg = rotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-8deg'] });
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={pressIn}
+      onPressOut={pressOut}
+      style={[styles.key, keyVariantStyle[variant], wide && styles.keyWide]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Animated.View style={{ transform: [{ scale }, { rotate: rotateDeg }] }}>
+        <Text style={keyLabelStyle[variant]}>{label}</Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 const CHART_W = 300;
 const CHART_H = 160;
 const PAD_L = 36;
@@ -78,14 +137,13 @@ function StepsChart({ steps }: { steps: Step[] }) {
       {points.map((p, i) => {
         const isLast = i === points.length - 1;
         return (
-          <React.Fragment key={i}>
-            <Line
-              x1={sx(p.x)} y1={sy(p.y)} x2={sx(p.x)} y2={sy(p.y)}
-              stroke={isLast ? COLORS.equalsDark : COLORS.operator}
-              strokeWidth={isLast ? 9 : 7}
-              strokeLinecap="round"
-            />
-          </React.Fragment>
+          <Line
+            key={i}
+            x1={sx(p.x)} y1={sy(p.y)} x2={sx(p.x)} y2={sy(p.y)}
+            stroke={isLast ? COLORS.equalsDark : COLORS.operator}
+            strokeWidth={isLast ? 9 : 7}
+            strokeLinecap="round"
+          />
         );
       })}
     </Svg>
@@ -185,35 +243,37 @@ export default function ArithmeticModule() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.display}>
-        <Text style={styles.expression}>{expression}</Text>
-        <Text style={styles.displayValue}>{displayValue}</Text>
-      </View>
+      <View style={styles.dojo}>
+        <View style={styles.display}>
+          <Text style={styles.expression}>{expression || ' '}</Text>
+          <Text style={styles.displayValue}>{displayValue}</Text>
+        </View>
 
-      <View style={styles.keys}>
-        <Pressable style={[styles.key, styles.keyFn]} onPress={clearAll}><Text style={styles.keyFnLabel}>AC</Text></Pressable>
-        <Pressable style={[styles.key, styles.keyFn]} onPress={backspace}><Text style={styles.keyFnLabel}>⌫</Text></Pressable>
-        <Pressable style={[styles.key, styles.keyFn]} onPress={percent}><Text style={styles.keyFnLabel}>%</Text></Pressable>
-        <Pressable style={[styles.key, styles.keyOp]} onPress={() => setOp('÷')}><Text style={styles.keyOpLabel}>÷</Text></Pressable>
+        <View style={styles.keys}>
+          <CalcKey label="AC" onPress={clearAll} variant="fn" />
+          <CalcKey label="⌫" onPress={backspace} variant="fn" />
+          <CalcKey label="%" onPress={percent} variant="fn" />
+          <CalcKey label="÷" onPress={() => setOp('÷')} variant="operator" />
 
-        {(['7', '8', '9'] as const).map((d) => (
-          <Pressable key={d} style={styles.key} onPress={() => inputDigit(d)}><Text style={styles.keyLabel}>{d}</Text></Pressable>
-        ))}
-        <Pressable style={[styles.key, styles.keyOp]} onPress={() => setOp('×')}><Text style={styles.keyOpLabel}>×</Text></Pressable>
+          <CalcKey label="7" onPress={() => inputDigit('7')} variant="digit" />
+          <CalcKey label="8" onPress={() => inputDigit('8')} variant="digit" />
+          <CalcKey label="9" onPress={() => inputDigit('9')} variant="digit" />
+          <CalcKey label="×" onPress={() => setOp('×')} variant="operator" />
 
-        {(['4', '5', '6'] as const).map((d) => (
-          <Pressable key={d} style={styles.key} onPress={() => inputDigit(d)}><Text style={styles.keyLabel}>{d}</Text></Pressable>
-        ))}
-        <Pressable style={[styles.key, styles.keyOp]} onPress={() => setOp('−')}><Text style={styles.keyOpLabel}>−</Text></Pressable>
+          <CalcKey label="4" onPress={() => inputDigit('4')} variant="digit" />
+          <CalcKey label="5" onPress={() => inputDigit('5')} variant="digit" />
+          <CalcKey label="6" onPress={() => inputDigit('6')} variant="digit" />
+          <CalcKey label="−" onPress={() => setOp('−')} variant="operator" />
 
-        {(['1', '2', '3'] as const).map((d) => (
-          <Pressable key={d} style={styles.key} onPress={() => inputDigit(d)}><Text style={styles.keyLabel}>{d}</Text></Pressable>
-        ))}
-        <Pressable style={[styles.key, styles.keyOp]} onPress={() => setOp('+')}><Text style={styles.keyOpLabel}>+</Text></Pressable>
+          <CalcKey label="1" onPress={() => inputDigit('1')} variant="digit" />
+          <CalcKey label="2" onPress={() => inputDigit('2')} variant="digit" />
+          <CalcKey label="3" onPress={() => inputDigit('3')} variant="digit" />
+          <CalcKey label="+" onPress={() => setOp('+')} variant="operator" />
 
-        <Pressable style={[styles.key, styles.keyZero]} onPress={() => inputDigit('0')}><Text style={styles.keyLabel}>0</Text></Pressable>
-        <Pressable style={styles.key} onPress={inputDecimal}><Text style={styles.keyLabel}>.</Text></Pressable>
-        <Pressable style={[styles.key, styles.keyEquals]} onPress={evaluate}><Text style={styles.keyEqualsLabel}>=</Text></Pressable>
+          <CalcKey label="0" onPress={() => inputDigit('0')} variant="digit" wide />
+          <CalcKey label="." onPress={inputDecimal} variant="digit" />
+          <CalcKey label="=" onPress={evaluate} variant="equals" />
+        </View>
       </View>
 
       <Text style={styles.sectionLabel}>Step-by-step breakdown</Text>
@@ -251,25 +311,30 @@ export default function ArithmeticModule() {
 
 const styles = StyleSheet.create({
   container: { padding: 18 },
-  display: {
-    backgroundColor: COLORS.surface,
+  dojo: {
+    backgroundColor: DOJO.panel,
     borderWidth: 2,
-    borderColor: COLORS.border,
+    borderColor: DOJO.panelBorder,
     borderRadius: theme.radius.lg,
-    padding: 18,
+    padding: 14,
+    marginBottom: 6,
+  },
+  display: {
     alignItems: 'flex-end',
-    marginBottom: 14,
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   expression: {
     fontSize: 13,
     fontFamily: theme.font.bodySemi,
-    color: COLORS.textMuted,
+    color: DOJO.mutedOnDark,
     minHeight: 16,
   },
   displayValue: {
-    fontSize: 34,
+    fontSize: 40,
     fontFamily: theme.font.display,
-    color: COLORS.text,
+    color: DOJO.textOnDark,
   },
   keys: {
     flexDirection: 'row',
@@ -278,47 +343,16 @@ const styles = StyleSheet.create({
   },
   key: {
     width: '23%',
-    aspectRatio: 1.3,
-    backgroundColor: COLORS.surface,
-    borderWidth: 2,
-    borderColor: COLORS.border,
+    aspectRatio: 1.2,
+    backgroundColor: DOJO.tile,
+    borderWidth: 1.5,
+    borderColor: DOJO.tileBorder,
     borderRadius: theme.radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  keyZero: {
+  keyWide: {
     width: '48.5%',
-  },
-  keyFn: {
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  keyOp: {
-    backgroundColor: COLORS.operator,
-    borderColor: COLORS.operator,
-  },
-  keyEquals: {
-    backgroundColor: COLORS.equals,
-    borderColor: COLORS.equals,
-  },
-  keyLabel: {
-    fontSize: 18,
-    fontFamily: theme.font.bodyExtraBold,
-    color: COLORS.text,
-  },
-  keyFnLabel: {
-    fontSize: 15,
-    fontFamily: theme.font.bodyExtraBold,
-    color: COLORS.textMuted,
-  },
-  keyOpLabel: {
-    fontSize: 20,
-    fontFamily: theme.font.bodyExtraBold,
-    color: '#FFFFFF',
-  },
-  keyEqualsLabel: {
-    fontSize: 22,
-    fontFamily: theme.font.bodyExtraBold,
-    color: COLORS.equalsDark,
   },
   sectionLabel: {
     marginTop: 20,
@@ -381,5 +415,44 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontFamily: theme.font.bodySemi,
     color: COLORS.textMuted,
+  },
+});
+
+const keyVariantStyle: Record<KeyVariant, object> = StyleSheet.create({
+  digit: {},
+  fn: {
+    backgroundColor: 'transparent',
+    borderColor: 'rgba(255, 159, 69, 0.55)',
+  },
+  operator: {
+    backgroundColor: theme.color.tangerine,
+    borderColor: theme.color.tangerine,
+  },
+  equals: {
+    backgroundColor: theme.color.mint,
+    borderColor: theme.color.mint,
+  },
+});
+
+const keyLabelStyle = StyleSheet.create({
+  digit: {
+    fontSize: 19,
+    fontFamily: theme.font.bodyExtraBold,
+    color: DOJO.textOnDark,
+  },
+  fn: {
+    fontSize: 15,
+    fontFamily: theme.font.bodyExtraBold,
+    color: theme.color.tangerine,
+  },
+  operator: {
+    fontSize: 21,
+    fontFamily: theme.font.bodyExtraBold,
+    color: '#FFFFFF',
+  },
+  equals: {
+    fontSize: 23,
+    fontFamily: theme.font.bodyExtraBold,
+    color: theme.color.mintDark,
   },
 });
