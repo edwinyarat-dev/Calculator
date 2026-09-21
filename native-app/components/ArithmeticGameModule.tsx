@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import ReAnimated from 'react-native-reanimated';
+import { AnswerBlocks } from '../src/features/deep-learning/AnswerBlocks';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
-import { EntryDisplay, NumericKeypad } from '../src/features/deep-learning/NumericKeypad';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
 import { ParticleBurst, useSuccessEffects } from '../src/features/deep-learning/useSuccessEffects';
@@ -21,6 +21,15 @@ function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 /**
  * How close a wrong final-round answer was, as a 0–1 score (1 = exact).
  * Every stage in this module reports this normalized score to the engine
@@ -33,8 +42,48 @@ function scoreAgainst(typed: number, answer: number): number {
   return Math.max(0, 1 - Math.abs(typed - answer) / Math.max(1, Math.abs(answer)));
 }
 
+/**
+ * Builds the tappable answer options for an a/b/op problem: the real answer
+ * plus a few distractors built from common real mistakes for that operator
+ * (adding instead of subtracting, off-by-one on an operand, a place-value
+ * slip, …), topped up with small random near-misses if there aren't enough
+ * natural candidates. Forces the player to actually evaluate each option
+ * rather than pattern-match a lone number, which is the point of swapping
+ * the keypad for blocks.
+ */
+function generateOpOptions(a: number, b: number, op: OpSymbol, count = 4): number[] {
+  const answer = compute(a, b, op);
+  const candidates = new Set<number>();
+  const add = (value: number) => {
+    if (value >= 0 && value !== answer) candidates.add(value);
+  };
+
+  if (op === '+') {
+    add(Math.abs(a - b)); // mistakenly subtracted
+    add(answer + 10);
+    add(answer - 10);
+  } else if (op === '−') {
+    add(a + b); // mistakenly added
+    add(Math.abs(b - a) === answer ? answer + 1 : Math.abs(b - a)); // reversed the operands
+  } else {
+    add(a + b); // mistakenly added
+    add(a * (b + 1)); // off-by-one on one operand
+    add((a + 1) * b);
+  }
+
+  let guard = 0;
+  while (candidates.size < count - 1 && guard < 30) {
+    guard++;
+    const offset = randomInt(1, 6) * (Math.random() < 0.5 ? -1 : 1);
+    add(answer + offset);
+  }
+
+  const distractors = shuffle([...candidates]).slice(0, count - 1);
+  return shuffle([answer, ...distractors]);
+}
+
 // ---------------------------------------------------------------------------
-// Stage 1 — Foundations: single-step sums, answered by typed digit
+// Stage 1 — Foundations: single-step sums, answered by tapping a rune block
 // ---------------------------------------------------------------------------
 
 function generateStage1Problems(): { a: number; b: number; op: OpSymbol }[] {
@@ -50,7 +99,7 @@ function generateStage1Problems(): { a: number; b: number; op: OpSymbol }[] {
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const [problems] = useState(generateStage1Problems);
   const [round, setRound] = useState(0);
-  const [entry, setEntry] = useState('');
+  const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
@@ -58,25 +107,17 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const isFinalRound = round === problems.length - 1;
   const problem = problems[round];
   const answer = compute(problem.a, problem.b, problem.op);
+  const options = useMemo(() => generateOpOptions(problem.a, problem.b, problem.op), [round]);
 
   useEffect(() => {
     finalRoundWonRef.current = false;
-    setEntry('');
+    setSelected(null);
     setFeedback('idle');
   }, [round]);
 
-  function pressDigit(d: string) {
-    if (!isActive || entry.length >= 3) return;
-    setEntry((e) => e + d);
-  }
-  function backspace() {
-    if (!isActive) return;
-    setEntry((e) => e.slice(0, -1));
-  }
-
-  function submit() {
-    if (!isActive || entry === '') return;
-    const value = Number(entry);
+  function handleSelect(value: number) {
+    if (!isActive || feedback !== 'idle') return;
+    setSelected(value);
     if (value === answer) {
       setFeedback('correct');
       effects.trigger();
@@ -84,15 +125,15 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
         finalRoundWonRef.current = true;
         onCommit(1);
       } else {
-        setRound((r) => r + 1);
+        setTimeout(() => setRound((r) => r + 1), 500);
       }
     } else {
       setFeedback('wrong');
       if (isFinalRound) onCommit(scoreAgainst(value, answer));
       setTimeout(() => {
-        setEntry('');
+        setSelected(null);
         setFeedback('idle');
-      }, 500);
+      }, 700);
     }
   }
 
@@ -100,15 +141,15 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>Round {round + 1} of {problems.length}</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
-        <EntryDisplay prompt={`${problem.a} ${problem.op} ${problem.b} = ?`} entry={entry} feedback={feedback} />
+        <Text style={styles.promptText}>{problem.a} {problem.op} {problem.b} = ?</Text>
         {effects.isBursting && (
           <View style={styles.burstOverlay} pointerEvents="none">
             <ParticleBurst progress={effects.burstProgress} />
           </View>
         )}
       </ReAnimated.View>
-      <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
-      <Text style={styles.stageHint}>Type the answer, then tap ✓ to check it.</Text>
+      <AnswerBlocks options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} />
+      <Text style={styles.stageHint}>Tap the rune with the right answer.</Text>
     </View>
   );
 }
@@ -132,7 +173,7 @@ function generateStage2Problems(): { a: number; b: number; op: OpSymbol }[] {
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [problems] = useState(generateStage2Problems);
   const [round, setRound] = useState(0);
-  const [entry, setEntry] = useState('');
+  const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
@@ -140,25 +181,17 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const isFinalRound = round === problems.length - 1;
   const problem = problems[round];
   const answer = compute(problem.a, problem.b, problem.op);
+  const options = useMemo(() => generateOpOptions(problem.a, problem.b, problem.op), [round]);
 
   useEffect(() => {
     finalRoundWonRef.current = false;
-    setEntry('');
+    setSelected(null);
     setFeedback('idle');
   }, [round]);
 
-  function pressDigit(d: string) {
-    if (!isActive || entry.length >= 4) return;
-    setEntry((e) => e + d);
-  }
-  function backspace() {
-    if (!isActive) return;
-    setEntry((e) => e.slice(0, -1));
-  }
-
-  function submit() {
-    if (!isActive || entry === '') return;
-    const value = Number(entry);
+  function handleSelect(value: number) {
+    if (!isActive || feedback !== 'idle') return;
+    setSelected(value);
     if (value === answer) {
       setFeedback('correct');
       effects.trigger();
@@ -166,15 +199,15 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         finalRoundWonRef.current = true;
         onCommit(1);
       } else {
-        setRound((r) => r + 1);
+        setTimeout(() => setRound((r) => r + 1), 500);
       }
     } else {
       setFeedback('wrong');
       if (isFinalRound) onCommit(scoreAgainst(value, answer));
       setTimeout(() => {
-        setEntry('');
+        setSelected(null);
         setFeedback('idle');
-      }, 500);
+      }, 700);
     }
   }
 
@@ -182,15 +215,15 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · bigger numbers, every operator</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
-        <EntryDisplay prompt={`${problem.a} ${problem.op} ${problem.b} = ?`} entry={entry} feedback={feedback} />
+        <Text style={styles.promptText}>{problem.a} {problem.op} {problem.b} = ?</Text>
         {effects.isBursting && (
           <View style={styles.burstOverlay} pointerEvents="none">
             <ParticleBurst progress={effects.burstProgress} />
           </View>
         )}
       </ReAnimated.View>
-      <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
-      <Text style={styles.stageHint}>Same idea, tougher numbers — watch your order of digits.</Text>
+      <AnswerBlocks options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} />
+      <Text style={styles.stageHint}>Same idea, tougher numbers — check each rune before you commit.</Text>
     </View>
   );
 }
@@ -215,7 +248,7 @@ function randomStage3Problem(): { a: number; b: number; op: OpSymbol } {
 
 function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
   const [problem, setProblem] = useState(randomStage3Problem);
-  const [entry, setEntry] = useState('');
+  const [selected, setSelected] = useState<number | null>(null);
   const [comboStreak, setComboStreak] = useState(0);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const [timeLeftMs, setTimeLeftMs] = useState(STAGE3_TIME_MS);
@@ -224,10 +257,11 @@ function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
   const effects = useSuccessEffects();
 
   const answer = compute(problem.a, problem.b, problem.op);
+  const options = useMemo(() => generateOpOptions(problem.a, problem.b, problem.op), [problem]);
 
   function nextProblem() {
     setProblem(randomStage3Problem());
-    setEntry('');
+    setSelected(null);
     setFeedback('idle');
     deadlineRef.current = Date.now() + STAGE3_TIME_MS;
     setTimeLeftMs(STAGE3_TIME_MS);
@@ -250,18 +284,9 @@ function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, problem]);
 
-  function pressDigit(d: string) {
-    if (!isActive || feedback !== 'idle' || entry.length >= 3) return;
-    setEntry((e) => e + d);
-  }
-  function backspace() {
+  function handleSelect(value: number) {
     if (!isActive || feedback !== 'idle') return;
-    setEntry((e) => e.slice(0, -1));
-  }
-
-  function submit() {
-    if (!isActive || feedback !== 'idle' || entry === '') return;
-    const value = Number(entry);
+    setSelected(value);
     if (value === answer) {
       const nextCombo = comboStreak + 1;
       setFeedback('correct');
@@ -276,7 +301,7 @@ function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
     } else {
       setComboStreak(0);
       setFeedback('wrong');
-      setTimeout(nextProblem, 400);
+      setTimeout(nextProblem, 500);
     }
   }
 
@@ -290,14 +315,14 @@ function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
         <View style={styles.clockTrack}>
           <View style={[styles.clockFill, { width: `${timePct * 100}%`, backgroundColor: timeColor }]} />
         </View>
-        <EntryDisplay prompt={`${problem.a} ${problem.op} ${problem.b} = ?`} entry={entry} feedback={feedback} />
+        <Text style={styles.promptText}>{problem.a} {problem.op} {problem.b} = ?</Text>
         {effects.isBursting && (
           <View style={styles.burstOverlay} pointerEvents="none">
             <ParticleBurst progress={effects.burstProgress} />
           </View>
         )}
       </ReAnimated.View>
-      <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
+      <AnswerBlocks options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} />
       <Text style={styles.stageHint}>A miss or a timeout resets your combo — get {STAGE3_STREAK_TARGET} straight to clear the stage.</Text>
     </View>
   );
@@ -313,17 +338,21 @@ const STAGE4_TARGET_PERCENT = 95;
 interface Stage4Problem {
   text: string;
   answer: number;
+  /** The result a player gets by ignoring the parentheses (or evaluating
+   * strictly left-to-right) — the single most common real mistake for this
+   * kind of expression, so it makes a genuinely thought-provoking distractor. */
+  misconception: number;
 }
 
 const STAGE4_PROBLEMS: Stage4Problem[] = [
-  { text: '(3 + 5) × 2', answer: 16 },
-  { text: '10 − (2 × 3)', answer: 4 },
-  { text: '4 × (6 − 2)', answer: 16 },
-  { text: '(12 − 4) ÷ 2', answer: 4 },
-  { text: '9 + (3 × 4)', answer: 21 },
-  { text: '(18 ÷ 3) + 5', answer: 11 },
-  { text: '2 × (5 + 3) − 4', answer: 12 },
-  { text: '(7 + 2) − (2 × 3)', answer: 3 },
+  { text: '(3 + 5) × 2', answer: 16, misconception: 13 },
+  { text: '10 − (2 × 3)', answer: 4, misconception: 24 },
+  { text: '4 × (6 − 2)', answer: 16, misconception: 22 },
+  { text: '(12 − 4) ÷ 2', answer: 4, misconception: 10 },
+  { text: '9 + (3 × 4)', answer: 21, misconception: 48 },
+  { text: '(18 ÷ 3) + 5', answer: 11, misconception: 59 },
+  { text: '2 × (5 + 3) − 4', answer: 12, misconception: 9 },
+  { text: '(7 + 2) − (2 × 3)', answer: 3, misconception: 21 },
 ];
 
 function randomStage4Problem(lastText?: string): Stage4Problem {
@@ -336,9 +365,27 @@ function randomStage4Problem(lastText?: string): Stage4Problem {
   return p;
 }
 
+function generateStage4Options(problem: Stage4Problem, count = 4): number[] {
+  const candidates = new Set<number>();
+  const add = (value: number) => {
+    if (value >= 0 && value !== problem.answer) candidates.add(value);
+  };
+  add(problem.misconception);
+
+  let guard = 0;
+  while (candidates.size < count - 1 && guard < 30) {
+    guard++;
+    const offset = randomInt(1, 5) * (Math.random() < 0.5 ? -1 : 1);
+    add(problem.answer + offset);
+  }
+
+  const distractors = shuffle([...candidates]).slice(0, count - 1);
+  return shuffle([problem.answer, ...distractors]);
+}
+
 function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
   const [problem, setProblem] = useState<Stage4Problem>(() => randomStage4Problem());
-  const [entry, setEntry] = useState('');
+  const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const [attempts, setAttempts] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
@@ -346,25 +393,17 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
   const effects = useSuccessEffects();
 
   const accuracyPercent = attempts === 0 ? 100 : (correctCount / attempts) * 100;
+  const options = useMemo(() => generateStage4Options(problem), [problem]);
 
   function nextProblem(currentText: string) {
     setProblem(randomStage4Problem(currentText));
-    setEntry('');
+    setSelected(null);
     setFeedback('idle');
   }
 
-  function pressDigit(d: string) {
-    if (!isActive || feedback !== 'idle' || entry.length >= 4) return;
-    setEntry((e) => e + d);
-  }
-  function backspace() {
-    if (!isActive || feedback !== 'idle') return;
-    setEntry((e) => e.slice(0, -1));
-  }
-
-  function submit() {
-    if (!isActive || feedback !== 'idle' || entry === '' || wonRef.current) return;
-    const value = Number(entry);
+  function handleSelect(value: number) {
+    if (!isActive || feedback !== 'idle' || wonRef.current) return;
+    setSelected(value);
     const correct = value === problem.answer;
     const nextAttempts = attempts + 1;
     const nextCorrect = correctCount + (correct ? 1 : 0);
@@ -373,20 +412,20 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
     setFeedback(correct ? 'correct' : 'wrong');
 
     const percent = (nextCorrect / nextAttempts) * 100;
+    if (correct) effects.trigger();
     if (correct && nextAttempts >= STAGE4_MIN_ATTEMPTS && percent >= STAGE4_TARGET_PERCENT) {
       wonRef.current = true;
-      effects.trigger();
       onCommit(percent);
       return;
     }
-    setTimeout(() => nextProblem(problem.text), 500);
+    setTimeout(() => nextProblem(problem.text), 700);
   }
 
   return (
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>Boss level: order of operations — {STAGE4_TARGET_PERCENT}% accuracy over {STAGE4_MIN_ATTEMPTS}+ problems</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
-        <EntryDisplay prompt={`${problem.text} = ?`} entry={entry} feedback={feedback} />
+        <Text style={styles.promptText}>{problem.text} = ?</Text>
         {effects.isBursting && (
           <View style={styles.burstOverlay} pointerEvents="none">
             <ParticleBurst progress={effects.burstProgress} />
@@ -402,7 +441,7 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
         <Text style={styles.stageHint}> · {attempts} answered</Text>
       </View>
 
-      <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
+      <AnswerBlocks options={options} selected={selected} correctValue={problem.answer} feedback={feedback} onSelect={handleSelect} />
       <Text style={styles.stageHint}>Remember: parentheses first, then multiply/divide, then add/subtract.</Text>
     </View>
   );
@@ -492,6 +531,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 12,
+  },
+  promptText: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: DL_COLORS.text,
+    textAlign: 'center',
   },
   burstOverlay: {
     position: 'absolute',
