@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { awardXP, markRealmCleared } from '../../utils/gameState';
+import { MODULES } from '../../../theme';
 import { DeepLearningProvider, useDeepLearning } from './DeepLearningContext';
 import LevelSelector from './LevelSelector';
 import { DL_COLORS } from './theme';
@@ -63,12 +64,10 @@ export function NearMissBanner() {
 
 export function StageCompleteBanner({
   visible,
-  isFinalStage,
   onContinue,
 }: {
   visible: boolean;
-  isFinalStage: boolean;
-  /** Advances to the next stage, or — on the final stage — restarts the module with fresh numbers. */
+  /** Advances to the next stage. */
   onContinue: () => void;
 }) {
   const slide = useRef(new Animated.Value(0)).current;
@@ -83,17 +82,54 @@ export function StageCompleteBanner({
 
   return (
     <Animated.View style={[styles.completeBanner, { opacity: slide, transform: [{ translateY }] }]}>
-      <Text style={styles.completeEmoji}>{isFinalStage ? '🏆' : '⚡'}</Text>
-      <Text style={styles.completeTitle}>{isFinalStage ? 'Module Mastered!' : 'Stage Cleared!'}</Text>
+      <Text style={styles.completeEmoji}>⚡</Text>
+      <Text style={styles.completeTitle}>Stage Cleared!</Text>
       <Pressable
         style={styles.continueButton}
         onPress={onContinue}
         accessibilityRole="button"
-        accessibilityLabel={isFinalStage ? 'Play again' : 'Continue to next stage'}
+        accessibilityLabel="Continue to next stage"
       >
-        <Text style={styles.continueButtonText}>{isFinalStage ? 'Play Again ↻' : 'Continue ➔'}</Text>
+        <Text style={styles.continueButtonText}>Continue ➔</Text>
       </Pressable>
     </Animated.View>
+  );
+}
+
+/** Pops up over the whole screen once a player clears every stage of a realm — distinct from the inline per-stage banner since finishing a realm is a bigger moment worth interrupting the view for. */
+export function RealmCompleteModal({
+  visible,
+  realmTitle,
+  realmEmoji,
+  xpEarned,
+  onPlayAgain,
+}: {
+  visible: boolean;
+  realmTitle: string;
+  realmEmoji: string;
+  xpEarned: number;
+  onPlayAgain: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onPlayAgain}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalEmoji}>{realmEmoji} 🏆</Text>
+          <Text style={styles.modalTitle}>Realm Complete!</Text>
+          <Text style={styles.modalSubtitle}>
+            Congrats — you mastered every stage of {realmTitle} and earned {xpEarned} XP!
+          </Text>
+          <Pressable
+            style={styles.continueButton}
+            onPress={onPlayAgain}
+            accessibilityRole="button"
+            accessibilityLabel="Play again"
+          >
+            <Text style={styles.continueButtonText}>Play Again ↻</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -103,6 +139,7 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
   const prevXpRef = useRef(0);
 
   const isFinalStage = activeStageIndex === stages.length - 1;
+  const realmMeta = MODULES.find((m) => m.key === realmId);
 
   useEffect(() => {
     if (lastResult !== 'won') return;
@@ -149,7 +186,14 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
           isActive
         />
       )}
-      <StageCompleteBanner visible={showBanner} isFinalStage={isFinalStage} onContinue={handleContinue} />
+      <StageCompleteBanner visible={showBanner && !isFinalStage} onContinue={handleContinue} />
+      <RealmCompleteModal
+        visible={showBanner && isFinalStage}
+        realmTitle={realmMeta?.title ?? 'this realm'}
+        realmEmoji={realmMeta?.emoji ?? '🏆'}
+        xpEarned={xpEarned}
+        onPlayAgain={handleContinue}
+      />
     </View>
   );
 }
@@ -287,5 +331,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: DL_COLORS.bgDeep,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(6, 9, 18, 0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: DL_COLORS.limeSoft,
+    borderWidth: 2,
+    borderColor: DL_COLORS.lime,
+    borderRadius: 26,
+    padding: 28,
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: DL_COLORS.lime,
+    shadowOpacity: 0.7,
+    shadowRadius: 24,
+    elevation: 14,
+  },
+  modalEmoji: {
+    fontSize: 48,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: DL_COLORS.lime,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: DL_COLORS.text,
+    textAlign: 'center',
   },
 });
