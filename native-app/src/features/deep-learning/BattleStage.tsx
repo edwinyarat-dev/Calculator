@@ -46,6 +46,10 @@ export interface BattleStageProps {
   isNearMiss?: boolean;
   /** The real XP gained on the most recent win, shown as a floating reward number. */
   xpGain: number;
+  /** Increments on every tap/keystroke inside the Magic Deck below — not just a final
+   * correct/wrong result — so the hero visibly channels energy while the player is
+   * still mid-decision, not only after they commit. Carries no game data. */
+  channelPulse?: number;
   heroImageSource?: ImageSourcePropType;
   enemyImageSource?: ImageSourcePropType;
 }
@@ -89,6 +93,7 @@ export function BattleStage({
   resultToken,
   isNearMiss,
   xpGain,
+  channelPulse = 0,
   heroImageSource,
   enemyImageSource,
 }: BattleStageProps) {
@@ -105,7 +110,10 @@ export function BattleStage({
   const burstProgress = useSharedValue(0);
   const rewardY = useSharedValue(0);
   const rewardOpacity = useSharedValue(0);
+  const channelGlow = useSharedValue(0);
+  const channelScale = useSharedValue(1);
   const isFirstRender = useRef(true);
+  const isFirstPulse = useRef(true);
 
   useEffect(() => {
     heroBob.value = withRepeat(withSequence(withTiming(-5, { duration: 1700 }), withTiming(0, { duration: 1700 })), -1, true);
@@ -154,13 +162,30 @@ export function BattleStage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultToken]);
 
+  // Every tap/keystroke in the Magic Deck below fires this, live — a small,
+  // quick glow + scale bump so the hero visibly reacts while the player is
+  // still deciding, not only once a final result comes back.
+  useEffect(() => {
+    if (isFirstPulse.current) {
+      isFirstPulse.current = false;
+      return;
+    }
+    channelGlow.value = withSequence(withTiming(1, { duration: 80 }), withTiming(0, { duration: 260 }));
+    channelScale.value = withSequence(
+      withTiming(1.06, { duration: 90, easing: Easing.out(Easing.quad) }),
+      withTiming(1, { duration: 200 })
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelPulse]);
+
   const heroStyle = useAnimatedStyle(() => ({
     transform: [
       { translateY: heroBob.value },
       { translateX: heroShakeX.value + heroLurch.value * 14 },
-      { scale: 1 + heroLurch.value * 0.06 },
+      { scale: (1 + heroLurch.value * 0.06) * channelScale.value },
     ],
   }));
+  const channelGlowStyle = useAnimatedStyle(() => ({ opacity: channelGlow.value }));
   const enemyStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: enemyBob.value }],
   }));
@@ -211,6 +236,7 @@ export function BattleStage({
             ) : (
               <Text style={styles.portraitEmoji}>{HERO_IDENTITY.emoji}</Text>
             )}
+            <Animated.View style={[styles.channelGlow, channelGlowStyle]} pointerEvents="none" />
           </Animated.View>
         </Pressable>
 
@@ -269,13 +295,7 @@ export default BattleStage;
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: DL_COLORS.border,
-    backgroundColor: DL_COLORS.surface,
     padding: 12,
-    marginBottom: 10,
-    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
@@ -370,6 +390,19 @@ const styles = StyleSheet.create({
     bottom: 0,
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
+  },
+  channelGlow: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: DL_COLORS.sky,
+    shadowColor: DL_COLORS.sky,
+    shadowOpacity: 1,
+    shadowRadius: 14,
   },
   bolt: {
     position: 'absolute',

@@ -2,6 +2,7 @@ import { Wand2 } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import { useBattlePulse } from './BattlePulseContext';
 import { DL_COLORS } from './theme';
 
 // Shared across every module that answers a stage by typing digits rather
@@ -15,6 +16,7 @@ export interface NumericKeypadProps {
 }
 
 export function NumericKeypad({ onDigit, onBackspace, onSubmit, disabled }: NumericKeypadProps) {
+  const pulse = useBattlePulse();
   const rows = [
     ['7', '8', '9'],
     ['4', '5', '6'],
@@ -28,7 +30,10 @@ export function NumericKeypad({ onDigit, onBackspace, onSubmit, disabled }: Nume
             <Pressable
               key={d}
               disabled={disabled}
-              onPress={() => onDigit(d)}
+              onPress={() => {
+                pulse();
+                onDigit(d);
+              }}
               style={styles.keypadKey}
               accessibilityRole="button"
               accessibilityLabel={`Digit ${d}`}
@@ -50,7 +55,10 @@ export function NumericKeypad({ onDigit, onBackspace, onSubmit, disabled }: Nume
         </Pressable>
         <Pressable
           disabled={disabled}
-          onPress={() => onDigit('0')}
+          onPress={() => {
+            pulse();
+            onDigit('0');
+          }}
           style={styles.keypadKey}
           accessibilityRole="button"
           accessibilityLabel="Digit 0"
@@ -59,7 +67,10 @@ export function NumericKeypad({ onDigit, onBackspace, onSubmit, disabled }: Nume
         </Pressable>
         <Pressable
           disabled={disabled}
-          onPress={onSubmit}
+          onPress={() => {
+            pulse();
+            onSubmit();
+          }}
           style={styles.keypadKeySubmit}
           accessibilityRole="button"
           accessibilityLabel="Check answer"

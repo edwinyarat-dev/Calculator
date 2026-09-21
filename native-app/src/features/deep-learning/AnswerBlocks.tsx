@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import { useBattlePulse } from './BattlePulseContext';
 import { DL_COLORS } from './theme';
 
 // A tap-to-select alternative to the digit keypad, specific to Number Ninja:
@@ -97,6 +98,7 @@ function randomInt(min: number, max: number): number {
 
 /** A small scattered pile of tappable wooden number blocks — one correct, the rest plausible wrong answers. Tapping the wrong one shakes it and glows red, and reveals the right one in lime, so a miss still teaches something. */
 export function AnswerBlocks({ options, selected, correctValue, feedback, disabled, onSelect, prefix }: AnswerBlocksProps) {
+  const pulse = useBattlePulse();
   return (
     <View style={styles.grid}>
       {options.map((opt) => {
@@ -112,7 +114,10 @@ export function AnswerBlocks({ options, selected, correctValue, feedback, disabl
             prefix={prefix}
             state={state}
             disabled={disabled || feedback !== 'idle'}
-            onPress={() => onSelect(opt)}
+            onPress={() => {
+              pulse();
+              onSelect(opt);
+            }}
           />
         );
       })}

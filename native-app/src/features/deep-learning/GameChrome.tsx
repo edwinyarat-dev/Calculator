@@ -3,6 +3,7 @@ import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { awardXP, markRealmCleared, useGameState } from '../../utils/gameState';
 import { HERO_IDENTITY, MODULES } from '../../../theme';
+import { BattlePulseProvider } from './BattlePulseContext';
 import { BattleStage } from './BattleStage';
 import { DeepLearningProvider, useDeepLearning } from './DeepLearningContext';
 import LevelSelector from './LevelSelector';
@@ -85,9 +86,11 @@ function HeroVitalsBay({ hp, mp, xpEarned, maxXp, streakCount }: { hp: number; m
   );
 }
 
-/** The Bottom Magic Deck: a consistent spellcaster-console frame around whichever
+/** The Bottom Magic Deck: a consistent spellcaster-console section around whichever
  * interactive widget the active stage renders (sliders, taps, holds, keypad) — the
- * widget itself is untouched, this only wraps it in the shared visual chrome. */
+ * widget itself is untouched, this only wraps it in the shared visual chrome. Sits
+ * inside the same outer frame as the Battle Arena above it (see `combatFrame`), with
+ * just a divider between them, so the two read as one screen instead of two boxes. */
 function MagicDeckFrame({ children }: { children: React.ReactNode }) {
   return (
     <View style={styles.deckFrame}>
@@ -205,8 +208,10 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
   const [lastXpGain, setLastXpGain] = useState(0);
   const [hp, setHp] = useState(MAX_HP);
   const [mp, setMp] = useState(40);
+  const [pulseToken, setPulseToken] = useState(0);
   const prevXpRef = useRef(0);
   const isFirstResult = useRef(true);
+  const pulse = React.useCallback(() => setPulseToken((t) => t + 1), []);
 
   const isFinalStage = activeStageIndex === stages.length - 1;
   const realmMeta = MODULES.find((m) => m.key === realmId);
@@ -267,35 +272,40 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
     <View style={styles.gameContainer}>
       <HeroVitalsBay hp={hp} mp={mp} xpEarned={xpEarned} maxXp={maxXp} streakCount={streakCount} />
       <LevelSelector stages={stages} activeStageIndex={activeStageIndex} unlockedStages={unlockedStages} onSelectStage={goToStage} />
-      <BattleStage
-        realmTitle={realmMeta?.title ?? 'Realm'}
-        realmEmoji={realmMeta?.emoji ?? '🧙'}
-        guardianName={realmMeta?.guardianName ?? 'Guardian'}
-        guardianEmoji={realmMeta?.guardianEmoji ?? '👹'}
-        guardianPurpose={realmMeta?.guardianPurpose ?? 'A guardian of this realm.'}
-        stageIndex={activeStageIndex}
-        totalStages={stages.length}
-        lastResult={lastResult}
-        resultToken={resultToken}
-        isNearMiss={isNearMiss}
-        xpGain={lastXpGain}
-      />
-      <Text style={styles.stageTitle}>{activeStage.title}</Text>
-      <NearMissBanner />
-      {!showBanner && (
-        <MagicDeckFrame>
-          <StageCanvas
-            value={0}
-            onChangeValue={() => {}}
-            onCommit={submitInput}
-            target={activeStage.targetValue}
-            tolerance={activeStage.toleranceThreshold}
-            isNearMiss={false}
-            nearMissMessage={null}
-            isActive
+      <BattlePulseProvider value={pulse}>
+        <View style={styles.combatFrame}>
+          <BattleStage
+            realmTitle={realmMeta?.title ?? 'Realm'}
+            realmEmoji={realmMeta?.emoji ?? '🧙'}
+            guardianName={realmMeta?.guardianName ?? 'Guardian'}
+            guardianEmoji={realmMeta?.guardianEmoji ?? '👹'}
+            guardianPurpose={realmMeta?.guardianPurpose ?? 'A guardian of this realm.'}
+            stageIndex={activeStageIndex}
+            totalStages={stages.length}
+            lastResult={lastResult}
+            resultToken={resultToken}
+            isNearMiss={isNearMiss}
+            xpGain={lastXpGain}
+            channelPulse={pulseToken}
           />
-        </MagicDeckFrame>
-      )}
+          <Text style={styles.stageTitle}>{activeStage.title}</Text>
+          <NearMissBanner />
+          {!showBanner && (
+            <MagicDeckFrame>
+              <StageCanvas
+                value={0}
+                onChangeValue={() => {}}
+                onCommit={submitInput}
+                target={activeStage.targetValue}
+                tolerance={activeStage.toleranceThreshold}
+                isNearMiss={false}
+                nearMissMessage={null}
+                isActive
+              />
+            </MagicDeckFrame>
+          )}
+        </View>
+      </BattlePulseProvider>
       <StageCompleteBanner visible={showBanner && !isFinalStage} onContinue={handleContinue} />
       <RealmCompleteModal
         visible={showBanner && isFinalStage}
@@ -389,12 +399,20 @@ const styles = StyleSheet.create({
     color: DL_COLORS.text,
     textAlign: 'right',
   },
-  deckFrame: {
-    borderRadius: 18,
+  combatFrame: {
+    borderRadius: 20,
     borderWidth: 2,
-    borderColor: DL_COLORS.sky,
+    borderColor: DL_COLORS.border,
+    backgroundColor: DL_COLORS.surface,
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  deckFrame: {
+    borderTopWidth: 2,
+    borderTopColor: DL_COLORS.sky,
     backgroundColor: 'rgba(56, 189, 248, 0.05)',
     padding: 14,
+    paddingTop: 16,
   },
   deckHeader: {
     flexDirection: 'row',
@@ -443,12 +461,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: DL_COLORS.text,
     textAlign: 'center',
+    marginTop: 12,
     marginBottom: 6,
+    paddingHorizontal: 14,
   },
   nearMissBanner: {
     borderWidth: 2,
     borderRadius: 14,
     padding: 10,
+    marginHorizontal: 14,
     marginBottom: 10,
     backgroundColor: DL_COLORS.surface,
   },
