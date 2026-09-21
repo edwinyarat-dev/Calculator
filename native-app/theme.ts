@@ -69,7 +69,7 @@ export const MODULES: ModuleMeta[] = [
     accent: theme.color.tangerine,
     accentDark: theme.color.tangerineDark,
     guardianName: 'Digit Golem',
-    guardianEmoji: '🗿',
+    guardianEmoji: '🧱',
     guardianPurpose: 'A construct built from raw numbers. It represents the arithmetic realm — face it down with fast, accurate +, −, and × instincts.',
   },
   {
@@ -80,7 +80,7 @@ export const MODULES: ModuleMeta[] = [
     accent: theme.color.sunshine,
     accentDark: theme.color.sunshineDark,
     guardianName: 'Debt Specter',
-    guardianEmoji: '👻',
+    guardianEmoji: '🧾',
     guardianPurpose: 'A haunting reminder of runaway debt. It represents the finance realm — banish it by understanding how compound interest grows money over time.',
   },
   {
@@ -91,7 +91,7 @@ export const MODULES: ModuleMeta[] = [
     accent: theme.color.grape,
     accentDark: theme.color.grapeDark,
     guardianName: 'Prism Warden',
-    guardianEmoji: '💎',
+    guardianEmoji: '🧊',
     guardianPurpose: 'A crystalline guardian of shapes and space. It represents the geometry realm — outsmart it with area, perimeter, and spatial reasoning.',
   },
   {
@@ -102,7 +102,7 @@ export const MODULES: ModuleMeta[] = [
     accent: theme.color.mint,
     accentDark: theme.color.mintDark,
     guardianName: 'Noise Phantom',
-    guardianEmoji: '🌫️',
+    guardianEmoji: '📡',
     guardianPurpose: 'A shape-shifter hiding inside scattered data. It represents the statistics realm — see through it with mean, median, and mode.',
   },
   {
@@ -113,7 +113,7 @@ export const MODULES: ModuleMeta[] = [
     accent: theme.color.sky,
     accentDark: theme.color.skyDark,
     guardianName: 'Vortex Maw',
-    guardianEmoji: '🌪️',
+    guardianEmoji: '🕳️',
     guardianPurpose: 'A swirling force born from the unit circle. It represents the trigonometry realm — steady it by mastering sine, cosine, and rotation.',
   },
   {
@@ -124,7 +124,7 @@ export const MODULES: ModuleMeta[] = [
     accent: theme.color.coral,
     accentDark: theme.color.coralDark,
     guardianName: 'Infinity Wraith',
-    guardianEmoji: '♾️',
+    guardianEmoji: '🌌',
     guardianPurpose: 'A being from the edge of the infinitely small. It represents the calculus realm — tame it by understanding limits and rates of change.',
   },
 ];
