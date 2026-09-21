@@ -2,9 +2,9 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import ArithmeticGameModule from '../../components/ArithmeticGameModule';
 import CalculusLimitVisualizer from '../../components/CalculusLimitVisualizer';
-import CompoundInterestModule from '../../components/CompoundInterestModule';
 import DataStatisticsModule from '../../components/DataStatisticsModule';
 import GeometryModule from '../../components/GeometryModule';
+import MoneyGrowerGameModule from '../../components/MoneyGrowerGameModule';
 import TrigonometryGameModule from '../../components/TrigonometryGameModule';
 import { ModuleKey } from '../../theme';
 import { DL_COLORS } from '../features/deep-learning/theme';
@@ -21,7 +21,7 @@ export interface KineticStageProps {
 const REALM_COMPONENTS: Record<ModuleKey, React.ComponentType> = {
   arithmetic: ArithmeticGameModule,
   trigonometry: TrigonometryGameModule,
-  compoundInterest: CompoundInterestModule,
+  compoundInterest: MoneyGrowerGameModule,
   geometry: GeometryModule,
   statistics: DataStatisticsModule,
   calculus: CalculusLimitVisualizer,
