@@ -8,7 +8,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
-import ArithmeticModule from './components/ArithmeticModule';
+import ArithmeticGameModule from './components/ArithmeticGameModule';
 import CalculusLimitVisualizer from './components/CalculusLimitVisualizer';
 import CompoundInterestModule from './components/CompoundInterestModule';
 import DataStatisticsModule from './components/DataStatisticsModule';
@@ -68,7 +68,7 @@ export default function App() {
             accent={activeModule!.accent}
             onBack={() => setScreen('home')}
           />
-          {screen === 'arithmetic' && <ArithmeticModule />}
+          {screen === 'arithmetic' && <ArithmeticGameModule />}
           {screen === 'compoundInterest' && <CompoundInterestModule />}
           {screen === 'geometry' && <GeometryModule />}
           {screen === 'statistics' && <DataStatisticsModule />}
