@@ -23,11 +23,11 @@ import { DL_COLORS } from './theme';
 // scoring, HP, or MP is introduced.
 
 const ARENA_W = 320;
-const ARENA_H = 168;
-const PORTRAIT_SIZE = 92;
-const HERO_X = 28;
-const ENEMY_X = ARENA_W - PORTRAIT_SIZE - 28;
-const PORTRAIT_Y = ARENA_H - PORTRAIT_SIZE - 14;
+const ARENA_H = 230;
+const PORTRAIT_SIZE = 140;
+const HERO_X = 16;
+const ENEMY_X = ARENA_W - PORTRAIT_SIZE - 16;
+const PORTRAIT_Y = ARENA_H - PORTRAIT_SIZE - 12;
 
 export interface BattleStageProps {
   realmTitle: string;
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     height: '82%',
   },
   portraitEmoji: {
-    fontSize: 42,
+    fontSize: 64,
   },
   enemyHitOverlay: {
     position: 'absolute',

@@ -1,11 +1,14 @@
-import { Sparkles } from 'lucide-react-native';
+import { Sparkles, Trophy } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { DL_COLORS } from '../features/deep-learning/theme';
 import { MODULES } from '../../theme';
 import { useGameState, xpProgress } from '../utils/gameState';
 
-/** The left-column HUD card: avatar, title/level, live XP bar, and realms-cleared progress. */
+const HERO_NAME = 'Aria Vex';
+
+/** The left-column HUD card: portrait, name/title/level, live XP bar, and realms-cleared progress. */
 export function CharacterProfileCard() {
   const hero = useGameState();
   const { current, span } = xpProgress(hero);
@@ -14,18 +17,40 @@ export function CharacterProfileCard() {
 
   return (
     <View style={styles.card}>
-      <View style={styles.avatarRing}>
-        <Text style={styles.avatarEmoji}>🧙</Text>
+      <View style={styles.portraitFrame}>
+        <Text style={styles.portraitEmoji}>🧙‍♀️</Text>
+        <View style={styles.levelBadge}>
+          <Text style={styles.levelBadgeText}>{hero.level}</Text>
+        </View>
       </View>
-      <Text style={styles.title}>{hero.title}</Text>
-      <Text style={styles.level}>Level {hero.level}</Text>
 
-      <View style={styles.xpBarTrack}>
-        <View style={[styles.xpBarFill, { width: `${pct}%` }]} />
+      <Text style={styles.title}>{hero.title}</Text>
+      <Text style={styles.heroName}>{HERO_NAME}</Text>
+
+      <View style={styles.statBar}>
+        <View style={styles.statBarHeader}>
+          <View style={styles.statBarLabelRow}>
+            <Sparkles size={12} color={DL_COLORS.amethyst} strokeWidth={2.5} />
+            <Text style={styles.statBarLabel}>XP to Lv {hero.level + 1}</Text>
+          </View>
+          <Text style={styles.statBarValue}>
+            {current} <Text style={styles.statBarValueMuted}>/ {span}</Text>
+          </Text>
+        </View>
+        <View style={styles.statBarTrack}>
+          <View style={[styles.statBarFillWrap, { width: `${pct}%` }]}>
+            <Svg width={220} height="100%" style={StyleSheet.absoluteFill}>
+              <Defs>
+                <LinearGradient id="xpGradient" x1="0" y1="0" x2="1" y2="0">
+                  <Stop offset="0%" stopColor={DL_COLORS.amethyst} />
+                  <Stop offset="100%" stopColor="#E879F9" />
+                </LinearGradient>
+              </Defs>
+              <Rect x={0} y={0} width="100%" height="100%" fill="url(#xpGradient)" />
+            </Svg>
+          </View>
+        </View>
       </View>
-      <Text style={styles.xpBarLabel}>
-        {current} / {span} XP to Level {hero.level + 1}
-      </Text>
 
       <View style={styles.statsBlock}>
         <View style={styles.statRow}>
@@ -34,7 +59,7 @@ export function CharacterProfileCard() {
           <Text style={styles.statValue}>{hero.totalXp}</Text>
         </View>
         <View style={styles.statRow}>
-          <Text style={styles.statCheck}>✓</Text>
+          <Trophy size={14} color={DL_COLORS.lime} strokeWidth={2.5} />
           <Text style={styles.statLabel}>Realms Cleared</Text>
           <Text style={styles.statValue}>
             {hero.clearedRealms.length}/{totalRealms}
@@ -56,57 +81,100 @@ const styles = StyleSheet.create({
     padding: 18,
     alignItems: 'center',
   },
-  avatarRing: {
-    width: 72,
-    height: 72,
-    borderRadius: 999,
-    borderWidth: 3,
+  portraitFrame: {
+    width: '100%',
+    aspectRatio: 1,
+    maxWidth: 180,
+    borderRadius: 18,
+    borderWidth: 2,
     borderColor: DL_COLORS.amethyst,
     backgroundColor: DL_COLORS.amethystSoft,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: DL_COLORS.amethyst,
     shadowOpacity: 0.7,
-    shadowRadius: 10,
-    marginBottom: 8,
+    shadowRadius: 16,
+    marginBottom: 10,
   },
-  avatarEmoji: {
-    fontSize: 34,
+  portraitEmoji: {
+    fontSize: 68,
+  },
+  levelBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: DL_COLORS.amethystGlow,
+    backgroundColor: DL_COLORS.bgDeep,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: DL_COLORS.amethyst,
+    shadowOpacity: 0.9,
+    shadowRadius: 8,
+  },
+  levelBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: DL_COLORS.amethyst,
   },
   title: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     color: DL_COLORS.amethyst,
     textTransform: 'uppercase',
     letterSpacing: 2,
   },
-  level: {
-    fontSize: 20,
+  heroName: {
+    fontSize: 19,
     fontWeight: '800',
     color: DL_COLORS.text,
     marginTop: 2,
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  xpBarTrack: {
+  statBar: {
+    width: '100%',
+  },
+  statBarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  statBarLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  statBarLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: DL_COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  statBarValue: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: DL_COLORS.text,
+  },
+  statBarValueMuted: {
+    color: DL_COLORS.textMuted,
+    fontWeight: '600',
+  },
+  statBarTrack: {
     width: '100%',
     height: 10,
     borderRadius: 999,
     backgroundColor: DL_COLORS.surfaceMuted,
     overflow: 'hidden',
   },
-  xpBarFill: {
+  statBarFillWrap: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: DL_COLORS.lime,
-    shadowColor: DL_COLORS.lime,
-    shadowOpacity: 0.7,
-    shadowRadius: 6,
-  },
-  xpBarLabel: {
-    fontSize: 11,
-    color: DL_COLORS.textMuted,
-    marginTop: 6,
-    textAlign: 'center',
+    overflow: 'hidden',
   },
   statsBlock: {
     width: '100%',
@@ -120,13 +188,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  statCheck: {
-    fontSize: 13,
-    color: DL_COLORS.lime,
-    fontWeight: '800',
-    width: 14,
-    textAlign: 'center',
   },
   statLabel: {
     flex: 1,
