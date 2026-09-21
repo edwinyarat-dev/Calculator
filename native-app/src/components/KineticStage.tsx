@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import ArithmeticGameModule from '../../components/ArithmeticGameModule';
-import CalculusLimitVisualizer from '../../components/CalculusLimitVisualizer';
 import DataDetectiveGameModule from '../../components/DataDetectiveGameModule';
+import LimitChaserGameModule from '../../components/LimitChaserGameModule';
 import MoneyGrowerGameModule from '../../components/MoneyGrowerGameModule';
 import ShapeArchitectGameModule from '../../components/ShapeArchitectGameModule';
 import TrigonometryGameModule from '../../components/TrigonometryGameModule';
@@ -24,7 +24,7 @@ const REALM_COMPONENTS: Record<ModuleKey, React.ComponentType> = {
   compoundInterest: MoneyGrowerGameModule,
   geometry: ShapeArchitectGameModule,
   statistics: DataDetectiveGameModule,
-  calculus: CalculusLimitVisualizer,
+  calculus: LimitChaserGameModule,
 };
 
 /** The active game viewport — renders whichever realm the player has selected in the RealmViewport. */
