@@ -83,7 +83,7 @@ function generateOpOptions(a: number, b: number, op: OpSymbol, count = 4): numbe
 }
 
 // ---------------------------------------------------------------------------
-// Stage 1 — Foundations: single-step sums, answered by tapping a rune block
+// Stage 1 — Foundations: single-step sums, answered by tapping a wooden block
 // ---------------------------------------------------------------------------
 
 function generateStage1Problems(): { a: number; b: number; op: OpSymbol }[] {
@@ -149,7 +149,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
         )}
       </ReAnimated.View>
       <AnswerBlocks options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} />
-      <Text style={styles.stageHint}>Tap the rune with the right answer.</Text>
+      <Text style={styles.stageHint}>Tap the wooden block with the right answer.</Text>
     </View>
   );
 }
@@ -223,7 +223,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         )}
       </ReAnimated.View>
       <AnswerBlocks options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} />
-      <Text style={styles.stageHint}>Same idea, tougher numbers — check each rune before you commit.</Text>
+      <Text style={styles.stageHint}>Same idea, tougher numbers — check each block before you commit.</Text>
     </View>
   );
 }
