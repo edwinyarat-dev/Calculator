@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import ArithmeticGameModule from '../../components/ArithmeticGameModule';
 import CalculusLimitVisualizer from '../../components/CalculusLimitVisualizer';
-import DataStatisticsModule from '../../components/DataStatisticsModule';
+import DataDetectiveGameModule from '../../components/DataDetectiveGameModule';
 import MoneyGrowerGameModule from '../../components/MoneyGrowerGameModule';
 import ShapeArchitectGameModule from '../../components/ShapeArchitectGameModule';
 import TrigonometryGameModule from '../../components/TrigonometryGameModule';
@@ -23,7 +23,7 @@ const REALM_COMPONENTS: Record<ModuleKey, React.ComponentType> = {
   trigonometry: TrigonometryGameModule,
   compoundInterest: MoneyGrowerGameModule,
   geometry: ShapeArchitectGameModule,
-  statistics: DataStatisticsModule,
+  statistics: DataDetectiveGameModule,
   calculus: CalculusLimitVisualizer,
 };
 
