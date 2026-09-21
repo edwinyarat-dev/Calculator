@@ -2,401 +2,409 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import ReAnimated from 'react-native-reanimated';
 import { AnswerBlocks } from '../src/features/deep-learning/AnswerBlocks';
+import { useDeepLearning } from '../src/features/deep-learning/DeepLearningContext';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
+import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
+import type { Difficulty, PerformanceTracker } from '../src/features/deep-learning/mathUtils';
+import { pickByDifficulty, randomInt, scoreAgainst, shuffle, usePerformanceTracker } from '../src/features/deep-learning/mathUtils';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
-import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
+import type { MathProblem, MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
 import { ParticleBurst, useSuccessEffects } from '../src/features/deep-learning/useSuccessEffects';
 
-type OpSymbol = '+' | '−' | '×';
+// ---------------------------------------------------------------------------
+// Number Ninja — place value, construction, comparison, and multi-step number
+// reasoning. Every question is a real MathProblem (question/answer/hint/
+// explanation) drawn from a difficulty-tiered pool via the shared
+// usePerformanceTracker/pickByDifficulty utilities (mathUtils.ts), so the
+// realm adapts to the player instead of just re-rolling the same range.
+// ---------------------------------------------------------------------------
 
-function compute(a: number, b: number, op: OpSymbol): number {
-  switch (op) {
-    case '+': return a + b;
-    case '−': return a - b;
-    case '×': return a * b;
-  }
+const PLACE_NAMES = ['ones', 'tens', 'hundreds', 'thousands', 'ten-thousands'];
+
+function fmt(n: number): string {
+  return n.toLocaleString('en-US');
 }
 
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+function digitAt(n: number, place: number): number {
+  return Math.floor(n / 10 ** place) % 10;
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+function placeValueOf(n: number, place: number): number {
+  return digitAt(n, place) * 10 ** place;
 }
 
-/**
- * How close a wrong final-round answer was, as a 0–1 score (1 = exact).
- * Every stage in this module reports this normalized score to the engine
- * instead of the raw typed value — the engine's win/near-miss check is then
- * a fixed "score >= 1" regardless of what the randomly-generated correct
- * answer happens to be each playthrough, so regenerating fresh problems on
- * restart can never desync from the win condition.
- */
-function scoreAgainst(typed: number, answer: number): number {
-  return Math.max(0, 1 - Math.abs(typed - answer) / Math.max(1, Math.abs(answer)));
+/** A number with exactly this many digits (no leading zero). */
+function randomNumberWithDigits(digits: number): number {
+  const min = 10 ** (digits - 1);
+  const max = 10 ** digits - 1;
+  return randomInt(min, max);
 }
 
-/**
- * Builds the tappable answer options for an a/b/op problem: the real answer
- * plus a few distractors built from common real mistakes for that operator
- * (adding instead of subtracting, off-by-one on an operand, a place-value
- * slip, …), topped up with small random near-misses if there aren't enough
- * natural candidates. Forces the player to actually evaluate each option
- * rather than pattern-match a lone number, which is the point of swapping
- * the keypad for blocks.
- */
-function generateOpOptions(a: number, b: number, op: OpSymbol, count = 6): number[] {
-  const answer = compute(a, b, op);
+function difficultyToDigits(difficulty: Difficulty): number {
+  return difficulty === 'easy' ? 3 : difficulty === 'medium' ? 4 : 5;
+}
+
+/** A round to show: the teaching-shaped problem plus the tappable option set (always includes the answer). */
+interface Round {
+  problem: MathProblem<number>;
+  options: number[];
+}
+
+function digitDistractors(correctDigit: number, count: number): number[] {
+  const pool = shuffle(Array.from({ length: 10 }, (_, i) => i).filter((d) => d !== correctDigit));
+  return pool.slice(0, count);
+}
+
+function nearbyNumberDistractors(answer: number, count: number, spread: number): number[] {
   const candidates = new Set<number>();
-  const add = (value: number) => {
-    if (value >= 0 && value !== answer) candidates.add(value);
+  const add = (v: number) => {
+    if (v >= 0 && v !== answer) candidates.add(v);
   };
-
-  if (op === '+') {
-    add(Math.abs(a - b)); // mistakenly subtracted
-    add(answer + 10);
-    add(answer - 10);
-  } else if (op === '−') {
-    add(a + b); // mistakenly added
-    add(Math.abs(b - a) === answer ? answer + 1 : Math.abs(b - a)); // reversed the operands
-  } else {
-    add(a + b); // mistakenly added
-    add(a * (b + 1)); // off-by-one on one operand
-    add((a + 1) * b);
-  }
-
   let guard = 0;
-  while (candidates.size < count - 1 && guard < 30) {
+  while (candidates.size < count && guard < 40) {
     guard++;
-    const offset = randomInt(1, 6) * (Math.random() < 0.5 ? -1 : 1);
+    const offset = randomInt(1, spread) * (Math.random() < 0.5 ? -1 : 1);
     add(answer + offset);
   }
-
-  const distractors = shuffle([...candidates]).slice(0, count - 1);
-  return shuffle([answer, ...distractors]);
+  return shuffle([...candidates]).slice(0, count);
 }
 
 // ---------------------------------------------------------------------------
-// Stage 1 — Foundations: single-step sums, answered by tapping a wooden block
+// Stage 1 — Digit Detective: identify digits & place value
 // ---------------------------------------------------------------------------
 
-function generateStage1Problems(): { a: number; b: number; op: OpSymbol }[] {
-  return Array.from({ length: 3 }, () => {
-    if (Math.random() < 0.5) {
-      return { a: randomInt(1, 9), b: randomInt(1, 9), op: '+' as const };
-    }
-    const a = randomInt(10, 18);
-    return { a, b: randomInt(1, a - 1), op: '−' as const };
-  });
-}
+function makeDigitPlaceValueRound(difficulty: Difficulty): Round {
+  const digits = difficultyToDigits(difficulty);
+  const n = randomNumberWithDigits(digits);
+  const maxPlace = Math.min(digits - 1, difficulty === 'easy' ? 2 : digits - 1);
+  const place = randomInt(0, maxPlace);
+  const askValue = place > 0 && Math.random() < 0.5;
+  const digit = digitAt(n, place);
+  const value = placeValueOf(n, place);
+  const answer = askValue ? value : digit;
 
-function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
-  const [problems] = useState(generateStage1Problems);
-  const [round, setRound] = useState(0);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
-  const finalRoundWonRef = useRef(false);
-  const effects = useSuccessEffects();
-
-  const isFinalRound = round === problems.length - 1;
-  const problem = problems[round];
-  const answer = compute(problem.a, problem.b, problem.op);
-  const options = useMemo(() => generateOpOptions(problem.a, problem.b, problem.op), [round]);
-
-  useEffect(() => {
-    finalRoundWonRef.current = false;
-    setSelected(null);
-    setFeedback('idle');
-  }, [round]);
-
-  function handleSelect(value: number) {
-    if (!isActive || feedback !== 'idle') return;
-    setSelected(value);
-    if (value === answer) {
-      setFeedback('correct');
-      effects.trigger();
-      if (isFinalRound) {
-        finalRoundWonRef.current = true;
-        onCommit(1);
-      } else {
-        setTimeout(() => setRound((r) => r + 1), 500);
-      }
-    } else {
-      setFeedback('wrong');
-      if (isFinalRound) onCommit(scoreAgainst(value, answer));
-      setTimeout(() => {
-        setSelected(null);
-        setFeedback('idle');
-      }, 700);
-    }
-  }
-
-  return (
-    <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Round {round + 1} of {problems.length}</Text>
-      <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
-        <Text style={styles.promptText}>{problem.a} {problem.op} {problem.b} = ?</Text>
-        {effects.isBursting && (
-          <View style={styles.burstOverlay} pointerEvents="none">
-            <ParticleBurst progress={effects.burstProgress} />
-          </View>
-        )}
-      </ReAnimated.View>
-      <AnswerBlocks options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} />
-      <Text style={styles.stageHint}>Tap the wooden block with the right answer.</Text>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Stage 2 — Quantitative Mechanics: two-digit combos across all operators
-// ---------------------------------------------------------------------------
-
-function generateStage2Problems(): { a: number; b: number; op: OpSymbol }[] {
-  return Array.from({ length: 3 }, () => {
-    const r = Math.random();
-    if (r < 0.4) return { a: randomInt(20, 70), b: randomInt(10, 40), op: '+' as const };
-    if (r < 0.8) {
-      const a = randomInt(30, 90);
-      return { a, b: randomInt(10, a - 5), op: '−' as const };
-    }
-    return { a: randomInt(3, 9), b: randomInt(3, 9), op: '×' as const };
-  });
-}
-
-function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
-  const [problems] = useState(generateStage2Problems);
-  const [round, setRound] = useState(0);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
-  const finalRoundWonRef = useRef(false);
-  const effects = useSuccessEffects();
-
-  const isFinalRound = round === problems.length - 1;
-  const problem = problems[round];
-  const answer = compute(problem.a, problem.b, problem.op);
-  const options = useMemo(() => generateOpOptions(problem.a, problem.b, problem.op), [round]);
-
-  useEffect(() => {
-    finalRoundWonRef.current = false;
-    setSelected(null);
-    setFeedback('idle');
-  }, [round]);
-
-  function handleSelect(value: number) {
-    if (!isActive || feedback !== 'idle') return;
-    setSelected(value);
-    if (value === answer) {
-      setFeedback('correct');
-      effects.trigger();
-      if (isFinalRound) {
-        finalRoundWonRef.current = true;
-        onCommit(1);
-      } else {
-        setTimeout(() => setRound((r) => r + 1), 500);
-      }
-    } else {
-      setFeedback('wrong');
-      if (isFinalRound) onCommit(scoreAgainst(value, answer));
-      setTimeout(() => {
-        setSelected(null);
-        setFeedback('idle');
-      }, 700);
-    }
-  }
-
-  return (
-    <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · bigger numbers, every operator</Text>
-      <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
-        <Text style={styles.promptText}>{problem.a} {problem.op} {problem.b} = ?</Text>
-        {effects.isBursting && (
-          <View style={styles.burstOverlay} pointerEvents="none">
-            <ParticleBurst progress={effects.burstProgress} />
-          </View>
-        )}
-      </ReAnimated.View>
-      <AnswerBlocks options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} />
-      <Text style={styles.stageHint}>Same idea, tougher numbers — check each block before you commit.</Text>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Stage 3 — Variables Challenge: beat the clock, 5 correct in a row
-// ---------------------------------------------------------------------------
-
-const STAGE3_TIME_MS = 8000;
-const STAGE3_STREAK_TARGET = 5;
-const STAGE3_TICK_MS = 50;
-
-function randomStage3Problem(): { a: number; b: number; op: OpSymbol } {
-  const op: OpSymbol = Math.random() < 0.5 ? '+' : '−';
-  if (op === '+') {
-    return { a: Math.floor(Math.random() * 40) + 1, b: Math.floor(Math.random() * 40) + 1, op };
-  }
-  const a = Math.floor(Math.random() * 40) + 10;
-  const b = Math.floor(Math.random() * a) + 1;
-  return { a, b, op };
-}
-
-function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
-  const [problem, setProblem] = useState(randomStage3Problem);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [comboStreak, setComboStreak] = useState(0);
-  const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
-  const [timeLeftMs, setTimeLeftMs] = useState(STAGE3_TIME_MS);
-  const deadlineRef = useRef(Date.now() + STAGE3_TIME_MS);
-  const wonRef = useRef(false);
-  const effects = useSuccessEffects();
-
-  const answer = compute(problem.a, problem.b, problem.op);
-  const options = useMemo(() => generateOpOptions(problem.a, problem.b, problem.op), [problem]);
-
-  function nextProblem() {
-    setProblem(randomStage3Problem());
-    setSelected(null);
-    setFeedback('idle');
-    deadlineRef.current = Date.now() + STAGE3_TIME_MS;
-    setTimeLeftMs(STAGE3_TIME_MS);
-  }
-
-  // The clock drains on its own — missing the deadline breaks the combo just like a wrong answer.
-  useEffect(() => {
-    if (!isActive || wonRef.current) return;
-    const id = setInterval(() => {
-      const remaining = deadlineRef.current - Date.now();
-      if (remaining <= 0) {
-        setComboStreak(0);
-        setFeedback('wrong');
-        setTimeout(nextProblem, 400);
-        return;
-      }
-      setTimeLeftMs(remaining);
-    }, STAGE3_TICK_MS);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, problem]);
-
-  function handleSelect(value: number) {
-    if (!isActive || feedback !== 'idle') return;
-    setSelected(value);
-    if (value === answer) {
-      const nextCombo = comboStreak + 1;
-      setFeedback('correct');
-      if (nextCombo >= STAGE3_STREAK_TARGET) {
-        wonRef.current = true;
-        effects.trigger();
-        onCommit(1);
-      } else {
-        setComboStreak(nextCombo);
-        setTimeout(nextProblem, 250);
-      }
-    } else {
-      setComboStreak(0);
-      setFeedback('wrong');
-      setTimeout(nextProblem, 500);
-    }
-  }
-
-  const timePct = Math.max(0, timeLeftMs / STAGE3_TIME_MS);
-  const timeColor = timePct > 0.5 ? DL_COLORS.lime : timePct > 0.2 ? DL_COLORS.amethyst : '#FF5C5C';
-
-  return (
-    <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Combo {comboStreak} of {STAGE3_STREAK_TARGET} — answer before time runs out</Text>
-      <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
-        <View style={styles.clockTrack}>
-          <View style={[styles.clockFill, { width: `${timePct * 100}%`, backgroundColor: timeColor }]} />
-        </View>
-        <Text style={styles.promptText}>{problem.a} {problem.op} {problem.b} = ?</Text>
-        {effects.isBursting && (
-          <View style={styles.burstOverlay} pointerEvents="none">
-            <ParticleBurst progress={effects.burstProgress} />
-          </View>
-        )}
-      </ReAnimated.View>
-      <AnswerBlocks options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} />
-      <Text style={styles.stageHint}>A miss or a timeout resets your combo — get {STAGE3_STREAK_TARGET} straight to clear the stage.</Text>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Stage 4 — Mastery Sandbox: order-of-operations boss, 95% accuracy to win
-// ---------------------------------------------------------------------------
-
-const STAGE4_MIN_ATTEMPTS = 10;
-const STAGE4_TARGET_PERCENT = 95;
-
-interface Stage4Problem {
-  text: string;
-  answer: number;
-  /** The result a player gets by ignoring the parentheses (or evaluating
-   * strictly left-to-right) — the single most common real mistake for this
-   * kind of expression, so it makes a genuinely thought-provoking distractor. */
-  misconception: number;
-}
-
-const STAGE4_PROBLEMS: Stage4Problem[] = [
-  { text: '(3 + 5) × 2', answer: 16, misconception: 13 },
-  { text: '10 − (2 × 3)', answer: 4, misconception: 24 },
-  { text: '4 × (6 − 2)', answer: 16, misconception: 22 },
-  { text: '(12 − 4) ÷ 2', answer: 4, misconception: 10 },
-  { text: '9 + (3 × 4)', answer: 21, misconception: 48 },
-  { text: '(18 ÷ 3) + 5', answer: 11, misconception: 59 },
-  { text: '2 × (5 + 3) − 4', answer: 12, misconception: 9 },
-  { text: '(7 + 2) − (2 × 3)', answer: 3, misconception: 21 },
-];
-
-function randomStage4Problem(lastText?: string): Stage4Problem {
-  let p = STAGE4_PROBLEMS[Math.floor(Math.random() * STAGE4_PROBLEMS.length)];
-  if (STAGE4_PROBLEMS.length > 1) {
-    while (p.text === lastText) {
-      p = STAGE4_PROBLEMS[Math.floor(Math.random() * STAGE4_PROBLEMS.length)];
-    }
-  }
-  return p;
-}
-
-function generateStage4Options(problem: Stage4Problem, count = 6): number[] {
-  const candidates = new Set<number>();
-  const add = (value: number) => {
-    if (value >= 0 && value !== problem.answer) candidates.add(value);
+  const problem: MathProblem<number> = {
+    id: `s1-${n}-${place}-${askValue}`,
+    question: askValue
+      ? `In ${fmt(n)}, what is the value of the digit in the ${PLACE_NAMES[place]} place?`
+      : `What digit is in the ${PLACE_NAMES[place]} place of ${fmt(n)}?`,
+    answer,
+    difficulty,
+    skill: 'place value',
+    hint: askValue
+      ? `Take the digit in that place and multiply it by ${fmt(10 ** place)}.`
+      : `Count place columns from the right: ones, tens, hundreds, thousands...`,
+    explanation: askValue
+      ? `The ${PLACE_NAMES[place]} digit in ${fmt(n)} is ${digit}, so its value is ${digit} × ${fmt(10 ** place)} = ${fmt(value)}.`
+      : `Counting place columns from the right, the ${PLACE_NAMES[place]} place of ${fmt(n)} holds the digit ${digit}.`,
   };
-  add(problem.misconception);
 
-  let guard = 0;
-  while (candidates.size < count - 1 && guard < 30) {
-    guard++;
-    const offset = randomInt(1, 5) * (Math.random() < 0.5 ? -1 : 1);
-    add(problem.answer + offset);
-  }
+  const options = askValue
+    ? shuffle([answer, ...nearbyNumberDistractors(answer, 5, Math.max(10, value))])
+    : shuffle([answer, ...digitDistractors(answer, 5)]);
 
-  const distractors = shuffle([...candidates]).slice(0, count - 1);
-  return shuffle([problem.answer, ...distractors]);
+  return { problem, options };
 }
 
-function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
-  const [problem, setProblem] = useState<Stage4Problem>(() => randomStage4Problem());
+const STAGE1_POOLS: Record<Difficulty, (() => Round)[]> = {
+  easy: [() => makeDigitPlaceValueRound('easy')],
+  medium: [() => makeDigitPlaceValueRound('medium')],
+  hard: [() => makeDigitPlaceValueRound('hard')],
+};
+
+// ---------------------------------------------------------------------------
+// Stage 2 — Number Builder: construct a number from its expanded (place
+// value) form
+// ---------------------------------------------------------------------------
+
+function makeConstructRound(difficulty: Difficulty): Round {
+  const digits = difficultyToDigits(difficulty);
+  const n = randomNumberWithDigits(digits);
+  const parts: string[] = [];
+  for (let p = digits - 1; p >= 0; p--) {
+    const v = placeValueOf(n, p);
+    if (v > 0) parts.push(fmt(v));
+  }
+  const expandedForm = parts.join(' + ');
+
+  const problem: MathProblem<number> = {
+    id: `s2-${n}`,
+    question: `Which number equals ${expandedForm}?`,
+    answer: n,
+    difficulty,
+    skill: 'constructing numbers from place value',
+    hint: 'Line up each part by its own place value, then add them together.',
+    explanation: `${expandedForm} = ${fmt(n)}.`,
+  };
+
+  // Distractors built from a real construction mistake — swapping two
+  // adjacent place-value digits — topped up with nearby numbers so a sparse
+  // digit string never leaves too few options.
+  const digitsStr = n.toString().padStart(digits, '0').split('');
+  const swapped = new Set<number>();
+  for (let i = 0; i < digitsStr.length - 1; i++) {
+    const copy = [...digitsStr];
+    [copy[i], copy[i + 1]] = [copy[i + 1], copy[i]];
+    const value = parseInt(copy.join(''), 10);
+    if (value !== n) swapped.add(value);
+  }
+  const distractors = new Set<number>([...swapped, ...nearbyNumberDistractors(n, 5, 10 ** Math.max(1, digits - 2))]);
+  const options = shuffle([n, ...shuffle([...distractors]).slice(0, 5)]);
+
+  return { problem, options };
+}
+
+const STAGE2_POOLS: Record<Difficulty, (() => Round)[]> = {
+  easy: [() => makeConstructRound('easy')],
+  medium: [() => makeConstructRound('medium')],
+  hard: [() => makeConstructRound('hard')],
+};
+
+// ---------------------------------------------------------------------------
+// Stage 3 — Compare & Order
+// ---------------------------------------------------------------------------
+
+function makeCompareRound(difficulty: Difficulty): Round {
+  const digits = difficultyToDigits(difficulty);
+  const a = randomNumberWithDigits(digits);
+  let b = randomNumberWithDigits(digits);
+  while (b === a) b = randomNumberWithDigits(digits);
+  const askGreater = Math.random() < 0.5;
+  const answer = askGreater ? Math.max(a, b) : Math.min(a, b);
+
+  // Find the highest place where the two numbers actually differ, for an
+  // explanation that teaches the comparison method, not just the result.
+  let diffPlace = digits - 1;
+  for (let p = digits - 1; p >= 0; p--) {
+    if (digitAt(a, p) !== digitAt(b, p)) {
+      diffPlace = p;
+      break;
+    }
+  }
+
+  const problem: MathProblem<number> = {
+    id: `s3cmp-${a}-${b}-${askGreater}`,
+    question: `Which number is ${askGreater ? 'greater' : 'smaller'}: ${fmt(a)} or ${fmt(b)}?`,
+    answer,
+    difficulty,
+    skill: 'comparing and ordering numbers',
+    hint: 'Compare digits starting from the leftmost place — the first place that differs decides it.',
+    explanation: `Reading from the left, the ${PLACE_NAMES[diffPlace]} place is the first one that differs (${digitAt(a, diffPlace)} vs ${digitAt(b, diffPlace)}), so ${fmt(Math.max(a, b))} is greater than ${fmt(Math.min(a, b))}.`,
+  };
+
+  return { problem, options: shuffle([a, b]) };
+}
+
+function makeOrderRound(difficulty: Difficulty): Round {
+  const digits = difficultyToDigits(difficulty);
+  const nums = new Set<number>();
+  while (nums.size < 3) nums.add(randomNumberWithDigits(digits));
+  const arr = shuffle([...nums]);
+  const sorted = [...arr].sort((x, y) => x - y);
+  const mode = randomInt(0, 2);
+  const answer = sorted[mode];
+  const label = mode === 0 ? 'smallest' : mode === 1 ? 'middle' : 'largest';
+
+  const problem: MathProblem<number> = {
+    id: `s3ord-${arr.join('-')}-${mode}`,
+    question: `Which of these numbers is the ${label} one: ${arr.map(fmt).join(', ')}?`,
+    answer,
+    difficulty,
+    skill: 'comparing and ordering numbers',
+    hint: 'Line the numbers up by their leading digit first, then work rightward if there is a tie.',
+    explanation: `In order from least to greatest: ${sorted.map(fmt).join(' < ')}. The ${label} value is ${fmt(answer)}.`,
+  };
+
+  return { problem, options: arr };
+}
+
+const STAGE3_POOLS: Record<Difficulty, (() => Round)[]> = {
+  easy: [() => makeCompareRound('easy'), () => makeOrderRound('easy')],
+  medium: [() => makeCompareRound('medium'), () => makeOrderRound('medium')],
+  hard: [() => makeCompareRound('hard'), () => makeOrderRound('hard')],
+};
+
+// ---------------------------------------------------------------------------
+// Stage 4 — Multi-step number challenge (boss): sustain accuracy over a
+// stream of two-step place-value + arithmetic problems
+// ---------------------------------------------------------------------------
+
+const STAGE4_MIN_ATTEMPTS = 8;
+const STAGE4_TARGET_PERCENT = 90;
+
+function makeMultiStepRound(difficulty: Difficulty): Round {
+  const digits = difficultyToDigits(difficulty);
+  const n = randomNumberWithDigits(digits);
+  const template = randomInt(0, 1);
+
+  if (template === 0) {
+    // Identify two digits' places, sum them, scale by 10.
+    const p1 = randomInt(0, digits - 1);
+    let p2 = randomInt(0, digits - 1);
+    while (p2 === p1) p2 = randomInt(0, digits - 1);
+    const d1 = digitAt(n, p1);
+    const d2 = digitAt(n, p2);
+    const answer = (d1 + d2) * 10;
+    const problem: MathProblem<number> = {
+      id: `s4a-${n}-${p1}-${p2}`,
+      question: `In ${fmt(n)}, add the digit in the ${PLACE_NAMES[p1]} place to the digit in the ${PLACE_NAMES[p2]} place, then multiply the sum by 10. What do you get?`,
+      answer,
+      difficulty,
+      skill: 'multi-step number reasoning',
+      hint: `First find each digit, add them, then multiply by 10.`,
+      explanation: `The ${PLACE_NAMES[p1]} digit is ${d1} and the ${PLACE_NAMES[p2]} digit is ${d2}. (${d1} + ${d2}) × 10 = ${fmt(answer)}.`,
+    };
+    return { problem, options: shuffle([answer, ...nearbyNumberDistractors(answer, 5, 30)]) };
+  }
+
+  // Construct a number from place-value pieces, then double it and subtract a round amount.
+  const subtractAmount = 10 ** Math.max(1, digits - 2) * randomInt(1, 5);
+  const built = digitAt(n, 0) + digitAt(n, 1) * 10 + (digits > 2 ? digitAt(n, 2) * 100 : 0);
+  const answer = built * 2 - subtractAmount;
+  const problem: MathProblem<number> = {
+    id: `s4b-${n}-${subtractAmount}`,
+    question: `A number has ${digitAt(n, 2) || 0} hundreds, ${digitAt(n, 1)} tens, and ${digitAt(n, 0)} ones. Double that number, then subtract ${fmt(subtractAmount)}. What is the result?`,
+    answer: Math.max(0, answer),
+    difficulty,
+    skill: 'multi-step number reasoning',
+    hint: 'Build the number first, then double it, then subtract.',
+    explanation: `The number is ${fmt(built)}. Doubled: ${fmt(built * 2)}. Minus ${fmt(subtractAmount)} = ${fmt(Math.max(0, answer))}.`,
+  };
+  return { problem, options: shuffle([Math.max(0, answer), ...nearbyNumberDistractors(Math.max(0, answer), 5, 50)]) };
+}
+
+const STAGE4_POOLS: Record<Difficulty, (() => Round)[]> = {
+  easy: [() => makeMultiStepRound('easy')],
+  medium: [() => makeMultiStepRound('medium')],
+  hard: [() => makeMultiStepRound('hard')],
+};
+
+// ---------------------------------------------------------------------------
+// Shared 3-round stage canvas: identical shape for stages 1–3, only the pool
+// and copy differ.
+// ---------------------------------------------------------------------------
+
+function useAdaptiveRound(pools: Record<Difficulty, (() => Round)[]>, tracker: PerformanceTracker, resetKey: unknown): Round {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => pickByDifficulty(pools, tracker.difficulty)(), [resetKey]);
+}
+
+function ThreeRoundStage({
+  totalRounds,
+  pools,
+  progressLabel,
+  onCommit,
+  isActive,
+}: {
+  totalRounds: number;
+  pools: Record<Difficulty, (() => Round)[]>;
+  progressLabel: string;
+} & StageCanvasProps) {
+  const tracker = usePerformanceTracker({ floor: 'easy', ceiling: 'hard' });
+  const { isNearMiss } = useDeepLearning();
+  const [round, setRound] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
+  const effects = useSuccessEffects();
+  const current = useAdaptiveRound(pools, tracker, round);
+  const isFinalRound = round === totalRounds - 1;
+
+  useEffect(() => {
+    tracker.startTimer();
+    setSelected(null);
+    setFeedback('idle');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round]);
+
+  function handleSelect(value: number) {
+    if (!isActive || feedback !== 'idle') return;
+    setSelected(value);
+    const correct = value === current.problem.answer;
+    setFeedback(correct ? 'correct' : 'wrong');
+    tracker.recordAttempt({ correct });
+
+    if (correct) {
+      effects.trigger();
+      if (isFinalRound) {
+        onCommit(1);
+      } else {
+        setTimeout(() => setRound((r) => r + 1), 650);
+      }
+    } else {
+      if (isFinalRound) onCommit(scoreAgainst(value, current.problem.answer));
+      setTimeout(() => {
+        if (!isFinalRound) setRound((r) => r + 1);
+        setSelected(null);
+        setFeedback('idle');
+      }, 1500);
+    }
+  }
+
+  const showNearMiss = isFinalRound && feedback === 'wrong' && isNearMiss;
+
+  return (
+    <View style={styles.stageBody}>
+      <Text style={styles.stageObjective}>
+        {progressLabel} {round + 1} of {totalRounds}
+      </Text>
+      <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
+        <Text style={styles.promptText}>{current.problem.question}</Text>
+        {effects.isBursting && (
+          <View style={styles.burstOverlay} pointerEvents="none">
+            <ParticleBurst progress={effects.burstProgress} />
+          </View>
+        )}
+      </ReAnimated.View>
+      <AnswerBlocks
+        options={current.options}
+        selected={selected}
+        correctValue={current.problem.answer}
+        feedback={feedback}
+        onSelect={handleSelect}
+      />
+      <HintExplanationPanel
+        hint={current.problem.hint}
+        explanation={feedback !== 'idle' ? current.problem.explanation : null}
+        feedback={feedback === 'idle' ? 'idle' : feedback === 'correct' ? 'correct' : showNearMiss ? 'nearMiss' : 'wrong'}
+        onUseHint={tracker.recordHintUsed}
+        disabled={feedback !== 'idle'}
+      />
+    </View>
+  );
+}
+
+function Stage1DigitDetective(props: StageCanvasProps) {
+  return <ThreeRoundStage totalRounds={3} pools={STAGE1_POOLS} progressLabel="Round" {...props} />;
+}
+
+function Stage2NumberBuilder(props: StageCanvasProps) {
+  return <ThreeRoundStage totalRounds={3} pools={STAGE2_POOLS} progressLabel="Round" {...props} />;
+}
+
+function Stage3CompareOrder(props: StageCanvasProps) {
+  return <ThreeRoundStage totalRounds={3} pools={STAGE3_POOLS} progressLabel="Round" {...props} />;
+}
+
+function Stage4MultiStepBoss({ onCommit, isActive }: StageCanvasProps) {
+  const tracker = usePerformanceTracker({ floor: 'easy', ceiling: 'hard' });
   const [attempts, setAttempts] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
+  const [roundKey, setRoundKey] = useState(0);
   const wonRef = useRef(false);
   const effects = useSuccessEffects();
+  const current = useAdaptiveRound(STAGE4_POOLS, tracker, roundKey);
+
+  useEffect(() => {
+    tracker.startTimer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roundKey]);
 
   const accuracyPercent = attempts === 0 ? 100 : (correctCount / attempts) * 100;
-  const options = useMemo(() => generateStage4Options(problem), [problem]);
 
-  function nextProblem(currentText: string) {
-    setProblem(randomStage4Problem(currentText));
+  function nextRound() {
+    setRoundKey((k) => k + 1);
     setSelected(null);
     setFeedback('idle');
   }
@@ -404,28 +412,35 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
   function handleSelect(value: number) {
     if (!isActive || feedback !== 'idle' || wonRef.current) return;
     setSelected(value);
-    const correct = value === problem.answer;
+    const correct = value === current.problem.answer;
     const nextAttempts = attempts + 1;
     const nextCorrect = correctCount + (correct ? 1 : 0);
     setAttempts(nextAttempts);
     setCorrectCount(nextCorrect);
     setFeedback(correct ? 'correct' : 'wrong');
+    tracker.recordAttempt({ correct });
 
     const percent = (nextCorrect / nextAttempts) * 100;
     if (correct) effects.trigger();
+    // Like every other stage, this only reports to the engine once — on the
+    // actual win — never on an interim miss; the boss keeps cycling fresh
+    // problems locally until the accuracy bar is cleared, so failure here
+    // can never permanently block progression, only slow it down.
     if (correct && nextAttempts >= STAGE4_MIN_ATTEMPTS && percent >= STAGE4_TARGET_PERCENT) {
       wonRef.current = true;
       onCommit(percent);
       return;
     }
-    setTimeout(() => nextProblem(problem.text), 700);
+    setTimeout(nextRound, 1500);
   }
 
   return (
     <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Boss level: order of operations — {STAGE4_TARGET_PERCENT}% accuracy over {STAGE4_MIN_ATTEMPTS}+ problems</Text>
+      <Text style={styles.stageObjective}>
+        Boss level: multi-step number reasoning — {STAGE4_TARGET_PERCENT}% accuracy over {STAGE4_MIN_ATTEMPTS}+ problems
+      </Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
-        <Text style={styles.promptText}>{problem.text} = ?</Text>
+        <Text style={styles.promptText}>{current.problem.question}</Text>
         {effects.isBursting && (
           <View style={styles.burstOverlay} pointerEvents="none">
             <ParticleBurst progress={effects.burstProgress} />
@@ -441,8 +456,20 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
         <Text style={styles.stageHint}> · {attempts} answered</Text>
       </View>
 
-      <AnswerBlocks options={options} selected={selected} correctValue={problem.answer} feedback={feedback} onSelect={handleSelect} />
-      <Text style={styles.stageHint}>Remember: parentheses first, then multiply/divide, then add/subtract.</Text>
+      <AnswerBlocks
+        options={current.options}
+        selected={selected}
+        correctValue={current.problem.answer}
+        feedback={feedback}
+        onSelect={handleSelect}
+      />
+      <HintExplanationPanel
+        hint={current.problem.hint}
+        explanation={feedback !== 'idle' ? current.problem.explanation : null}
+        feedback={feedback}
+        onUseHint={tracker.recordHintUsed}
+        disabled={feedback !== 'idle'}
+      />
     </View>
   );
 }
@@ -454,46 +481,55 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
 function buildArithmeticStages(): MathStageConfig[] {
   return [
     {
-      id: 'foundations',
-      title: 'Foundations',
-      objective: 'Solve simple one-step sums to build speed.',
+      id: 'digit-detective',
+      title: 'Digit Detective',
+      objective: 'Identify digits and their place value.',
       targetValue: 1,
       baseXp: 20,
       toleranceThreshold: 0,
-      nearMiss: { thresholdPercent: 15, message: 'So close — double-check that last digit!' },
+      nearMiss: { thresholdPercent: 15, message: 'So close — double-check which place column that is!' },
       checkWinCondition: (value, target) => value >= target,
-      renderCanvas: Stage1Foundations,
+      renderCanvas: Stage1DigitDetective,
+      skill: 'place value',
+      fastClearMs: 15000,
     },
     {
-      id: 'quantitative',
-      title: 'Quantitative Mechanics',
-      objective: 'Two-digit numbers across every operator.',
+      id: 'number-builder',
+      title: 'Number Builder',
+      objective: 'Construct numbers from their place-value parts.',
       targetValue: 1,
       baseXp: 40,
       toleranceThreshold: 0,
-      nearMiss: { thresholdPercent: 10, message: 'Right idea, just a small slip — try that one again.' },
+      nearMiss: { thresholdPercent: 12, message: 'Right idea, just a place got mixed up — try again.' },
       checkWinCondition: (value, target) => value >= target,
-      renderCanvas: Stage2QuantitativeMechanics,
+      renderCanvas: Stage2NumberBuilder,
+      skill: 'constructing numbers from place value',
+      fastClearMs: 20000,
     },
     {
-      id: 'variables',
-      title: 'The Variables Challenge',
-      objective: 'Answer fast, five in a row, before the clock runs out.',
+      id: 'compare-order',
+      title: 'Compare & Order',
+      objective: 'Compare and order multi-digit numbers.',
       targetValue: 1,
       baseXp: 60,
-      toleranceThreshold: 0.001,
-      checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
-      renderCanvas: Stage3VariablesChallenge,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 10, message: 'Those two were close in size — look at the leading digits again.' },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage3CompareOrder,
+      skill: 'comparing and ordering numbers',
+      fastClearMs: 22000,
     },
     {
-      id: 'mastery',
-      title: 'Mastery Sandbox',
-      objective: 'Order-of-operations boss — sustain 95% accuracy.',
+      id: 'multi-step-mastery',
+      title: 'Multi-Step Mastery',
+      objective: 'Boss: two-step place-value and arithmetic reasoning.',
       targetValue: STAGE4_TARGET_PERCENT,
       baseXp: 100,
       toleranceThreshold: 0,
       checkWinCondition: (value, target) => value >= target,
-      renderCanvas: Stage4MasterySandbox,
+      renderCanvas: Stage4MultiStepBoss,
+      skill: 'multi-step number reasoning',
+      fastClearMs: 45000,
     },
   ];
 }
@@ -533,7 +569,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   promptText: {
-    fontSize: 26,
+    fontSize: 20,
     fontWeight: '800',
     color: DL_COLORS.text,
     textAlign: 'center',
@@ -544,18 +580,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-  },
-  clockTrack: {
-    width: '100%',
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: DL_COLORS.surfaceMuted,
-    overflow: 'hidden',
-    marginBottom: 14,
-  },
-  clockFill: {
-    height: '100%',
-    borderRadius: 999,
   },
   stageHint: {
     fontSize: 12.5,

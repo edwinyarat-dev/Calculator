@@ -3,19 +3,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import ReAnimated from 'react-native-reanimated';
 import Svg, { Circle as SvgCircle, Line, Rect } from 'react-native-svg';
+import { useDeepLearning } from '../src/features/deep-learning/DeepLearningContext';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
+import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
+import { clampScore, randomInt, scoreAgainst } from '../src/features/deep-learning/mathUtils';
 import { EntryDisplay, NumericKeypad } from '../src/features/deep-learning/NumericKeypad';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
 import { ParticleBurst, useSuccessEffects } from '../src/features/deep-learning/useSuccessEffects';
-
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function clampScore(n: number): number {
-  return Math.max(0, Math.min(1, n));
-}
 
 // ---------------------------------------------------------------------------
 // Stage 1 — Foundations: "Blueprint Match", resize a room to match a plan
@@ -171,7 +166,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
         thumbTintColor={withinTolerance ? DL_COLORS.lime : DL_COLORS.amethyst}
         accessibilityLabel="Room height"
       />
-      <Text style={styles.stageHint}>Match the dashed blueprint outline and hold it steady.</Text>
+      <HintExplanationPanel hint="Drag both sliders until the solid room lines up with the dashed blueprint, then hold it steady." feedback="idle" />
     </View>
   );
 }
@@ -183,6 +178,8 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 interface GeometryProblem {
   prompt: string;
   answer: number;
+  hint: string;
+  explanation: string;
 }
 
 function generateStage2Problems(): GeometryProblem[] {
@@ -191,15 +188,25 @@ function generateStage2Problems(): GeometryProblem[] {
   const triSide = randomInt(5, 15);
   const circleR = randomInt(3, 10);
   return [
-    { prompt: `A rectangular garden is ${rectW} units by ${rectH} units. How many units of fencing (the perimeter) do you need to enclose it?`, answer: 2 * (rectW + rectH) },
-    { prompt: `A triangular pennant flag has three ${triSide}-unit sides. How many units of trim (the perimeter) does it need?`, answer: 3 * triSide },
-    { prompt: `A circular pool has a ${circleR}-unit radius. Rounded to the nearest whole number, how many square units of tile cover it?`, answer: Math.round(Math.PI * circleR * circleR) },
+    {
+      prompt: `A rectangular garden is ${rectW} units by ${rectH} units. How many units of fencing (the perimeter) do you need to enclose it?`,
+      answer: 2 * (rectW + rectH),
+      hint: 'A rectangle’s perimeter is twice the width plus twice the height.',
+      explanation: `2 × (${rectW} + ${rectH}) = ${2 * (rectW + rectH)}.`,
+    },
+    {
+      prompt: `A triangular pennant flag has three ${triSide}-unit sides. How many units of trim (the perimeter) does it need?`,
+      answer: 3 * triSide,
+      hint: 'Perimeter is just the sum of all the sides.',
+      explanation: `${triSide} + ${triSide} + ${triSide} = ${3 * triSide}.`,
+    },
+    {
+      prompt: `A circular pool has a ${circleR}-unit radius. Rounded to the nearest whole number, how many square units of tile cover it?`,
+      answer: Math.round(Math.PI * circleR * circleR),
+      hint: 'A circle’s area is π × radius².',
+      explanation: `π × ${circleR}² ≈ ${Math.round(Math.PI * circleR * circleR)}.`,
+    },
   ];
-}
-
-/** How close a wrong final-round answer was, as a 0–1 score — reported instead of the raw typed value so randomized problems can't desync the fixed win check. */
-function scoreAgainst(typed: number, answer: number): number {
-  return clampScore(1 - Math.abs(typed - answer) / Math.max(1, Math.abs(answer)));
 }
 
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
@@ -209,6 +216,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
+  const { isNearMiss } = useDeepLearning();
 
   const isFinalRound = round === problems.length - 1;
   const problem = problems[round];
@@ -262,6 +270,12 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         )}
       </ReAnimated.View>
       <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
+      <HintExplanationPanel
+        hint={problem.hint}
+        explanation={feedback !== 'idle' ? problem.explanation : null}
+        feedback={feedback === 'idle' ? 'idle' : feedback === 'correct' ? 'correct' : isFinalRound && isNearMiss ? 'nearMiss' : 'wrong'}
+        disabled={feedback !== 'idle'}
+      />
     </View>
   );
 }
@@ -395,9 +409,10 @@ function Stage3FenceOptimizer({ onCommit, isActive }: StageCanvasProps) {
         thumbTintColor={atMax ? DL_COLORS.lime : DL_COLORS.amethyst}
         accessibilityLabel="Garden width"
       />
-      <Text style={styles.stageHint}>
-        Widening the garden shrinks its height — the fence length never changes. Max possible area is {maxArea.toFixed(0)}.
-      </Text>
+      <HintExplanationPanel
+        hint={`Widening the garden shrinks its height — the fence length never changes. Max possible area is ${maxArea.toFixed(0)}, achieved by a square.`}
+        feedback="idle"
+      />
     </View>
   );
 }
@@ -495,6 +510,7 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
 
       <Text style={styles.sliderLabel}>Tower radius: {radius.toFixed(1)}</Text>
       <Slider style={styles.slider} minimumValue={1} maximumValue={10} step={0.1} value={radius} onValueChange={setRadius} minimumTrackTintColor={DL_COLORS.amethyst} maximumTrackTintColor={DL_COLORS.surfaceMuted} thumbTintColor={DL_COLORS.amethyst} />
+      <HintExplanationPanel hint="Total area is the hall's rectangle (width × height) plus the tower's circle (π × radius²)." feedback="idle" />
     </View>
   );
 }
@@ -515,6 +531,8 @@ function buildShapeArchitectStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 40, message: 'Almost the right size — nudge one wall a little closer.' },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage1Foundations,
+      skill: 'identifying geometric dimensions',
+      fastClearMs: 25000,
     },
     {
       id: 'quantitative',
@@ -526,6 +544,8 @@ function buildShapeArchitectStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 10, message: 'Close — double check your formula for that shape.' },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage2QuantitativeMechanics,
+      skill: 'calculating area and perimeter',
+      fastClearMs: 25000,
     },
     {
       id: 'variables',
@@ -537,6 +557,8 @@ function buildShapeArchitectStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 10, message: "So close to the max — a square uses fencing the most efficiently." },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage3FenceOptimizer,
+      skill: 'manipulating geometric relationships',
+      fastClearMs: 25000,
     },
     {
       id: 'mastery',
@@ -547,6 +569,8 @@ function buildShapeArchitectStages(): MathStageConfig[] {
       toleranceThreshold: 0,
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage4MasterySandbox,
+      skill: 'multi-step geometry problem solving',
+      fastClearMs: 35000,
     },
   ];
 }

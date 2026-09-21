@@ -3,7 +3,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import ReAnimated from 'react-native-reanimated';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { useDeepLearning } from '../src/features/deep-learning/DeepLearningContext';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
+import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
+import { clampScore, randomInt } from '../src/features/deep-learning/mathUtils';
 import { EntryDisplay, NumericKeypad } from '../src/features/deep-learning/NumericKeypad';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
@@ -28,14 +31,6 @@ function makeChartScales(xMin: number, xMax: number, yMin: number, yMax: number)
     sx: (x: number) => PAD + ((x - xMin) / (xMax - xMin)) * plotW,
     sy: (y: number) => PAD + plotH - ((y - yMin) / (yMax - yMin)) * plotH,
   };
-}
-
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function clampScore(n: number): number {
-  return Math.max(0, Math.min(1, n));
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +167,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
         thumbTintColor={withinTolerance ? DL_COLORS.lime : DL_COLORS.amethyst}
         accessibilityLabel="Time window h"
       />
-      <Text style={styles.stageHint}>Point B slides toward point A as the measuring window shrinks — hold it there.</Text>
+      <HintExplanationPanel hint="Point B slides toward point A as the measuring window h shrinks — that's the limit in action. Hold it below the threshold." feedback="idle" />
     </View>
   );
 }
@@ -211,9 +206,12 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
+  const { isNearMiss } = useDeepLearning();
 
   const isFinalRound = round === problems.length - 1;
   const problem = problems[round];
+  const heightAtT = f(problem.t);
+  const heightAtEnd = f(problem.t + problem.h);
   const answer = Math.round(avgVelocity(problem.t, problem.h));
 
   useEffect(() => {
@@ -265,7 +263,16 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         )}
       </ReAnimated.View>
       <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
-      <Text style={styles.stageHint}>Average speed = (height at the later time − height at the earlier time) ÷ time elapsed.</Text>
+      <HintExplanationPanel
+        hint="Average speed = (height at the later time − height at the earlier time) ÷ time elapsed."
+        explanation={
+          feedback !== 'idle'
+            ? `h(${problem.t}) = ${heightAtT}, h(${problem.t + problem.h}) = ${heightAtEnd}. (${heightAtEnd} − ${heightAtT}) ÷ ${problem.h} = ${answer}.`
+            : null
+        }
+        feedback={feedback === 'idle' ? 'idle' : feedback === 'correct' ? 'correct' : isFinalRound && isNearMiss ? 'nearMiss' : 'wrong'}
+        disabled={feedback !== 'idle'}
+      />
     </View>
   );
 }
@@ -367,7 +374,7 @@ function Stage3SpeedometerGlitch({ onCommit, isActive }: StageCanvasProps) {
       >
         <Text style={styles.lockButtonText}>{locking ? (goodWindow ? '🔒 Locked in!' : '🔓 Window too wide…') : '🔒 HOLD WHEN TIGHT'}</Text>
       </Pressable>
-      <Text style={styles.stageHint}>The window keeps resetting — hold across as many good passes as it takes to reach 3 seconds total.</Text>
+      <HintExplanationPanel hint="The window keeps resetting — hold across as many good passes as it takes to reach 3 seconds total. A tighter window means a more trustworthy reading." feedback="idle" />
     </View>
   );
 }
@@ -477,7 +484,7 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
 
       <Text style={styles.sliderLabel}>c (height offset): {c.toFixed(1)}</Text>
       <Slider style={styles.slider} minimumValue={-3} maximumValue={3} step={0.1} value={c} onValueChange={setC} minimumTrackTintColor={DL_COLORS.amethyst} maximumTrackTintColor={DL_COLORS.surfaceMuted} thumbTintColor={DL_COLORS.amethyst} />
-      <Text style={styles.stageHint}>Notice: sliding c moves the whole ramp up and down but never changes its steepness.</Text>
+      <HintExplanationPanel hint="Slope depends only on a and b — c just shifts the whole ramp up or down without changing its steepness." feedback="idle" />
     </View>
   );
 }
@@ -498,6 +505,8 @@ function buildLimitChaserStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 60, message: 'Getting tighter — squeeze the window a little more.' },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage1Foundations,
+      skill: 'approaching a value (limits)',
+      fastClearMs: 30000,
     },
     {
       id: 'quantitative',
@@ -509,6 +518,8 @@ function buildLimitChaserStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 15, message: 'Close — double-check your subtraction before dividing by the time elapsed.' },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage2QuantitativeMechanics,
+      skill: 'numerical difference tables',
+      fastClearMs: 25000,
     },
     {
       id: 'variables',
@@ -519,6 +530,8 @@ function buildLimitChaserStages(): MathStageConfig[] {
       toleranceThreshold: 0.001,
       checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
       renderCanvas: Stage3SpeedometerGlitch,
+      skill: 'graphical limits',
+      fastClearMs: 30000,
     },
     {
       id: 'mastery',
@@ -529,6 +542,8 @@ function buildLimitChaserStages(): MathStageConfig[] {
       toleranceThreshold: 0,
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage4MasterySandbox,
+      skill: 'multi-step limit reasoning',
+      fastClearMs: 40000,
     },
   ];
 }

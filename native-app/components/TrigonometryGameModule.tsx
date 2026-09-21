@@ -4,15 +4,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import ReAnimated from 'react-native-reanimated';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
+import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
+import { clampScore, randomInt } from '../src/features/deep-learning/mathUtils';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
 import { ParticleBurst, useSuccessEffects } from '../src/features/deep-learning/useSuccessEffects';
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
-
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
 
 /** Picks `count` distinct integers in [min, max], each at least minGap apart, for varied but fair rounds. */
 function pickSpacedInts(count: number, min: number, max: number, minGap: number): number[] {
@@ -25,11 +23,6 @@ function pickSpacedInts(count: number, min: number, max: number, minGap: number)
   }
   while (result.length < count) result.push(randomInt(min, max));
   return result;
-}
-
-/** Every stage reports a 0–1 score to the engine (1 = win) instead of the raw domain value, so randomizing the underlying targets each playthrough can never desync from the fixed win check. */
-function clampScore(n: number): number {
-  return Math.max(0, Math.min(1, n));
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +167,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
         thumbTintColor={withinTolerance ? DL_COLORS.lime : DL_COLORS.amethyst}
         accessibilityLabel="Angle slider"
       />
-      <Text style={styles.stageHint}>Hold the angle steady within ±{STAGE1_TOLERANCE}° for 1.5s to lock it in.</Text>
+      <HintExplanationPanel hint={`Drag the slider until the arm lines up with the dashed target, then hold it steady within ±${STAGE1_TOLERANCE}° for 1.5s.`} feedback="idle" />
     </View>
   );
 }
@@ -311,9 +304,10 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         thumbTintColor={withinTolerance ? DL_COLORS.lime : DL_COLORS.amethyst}
         accessibilityLabel="Vector angle dial"
       />
-      <Text style={styles.stageHint}>
-        θ = {Math.round(liveAngle)}° — try {Math.round((Math.asin(sinTarget) * 180) / Math.PI)}° or {180 - Math.round((Math.asin(sinTarget) * 180) / Math.PI)}°.
-      </Text>
+      <HintExplanationPanel
+        hint={`θ = ${Math.round(liveAngle)}° — sin(θ) is the vertical (Y) coordinate on the unit circle. Try ${Math.round((Math.asin(sinTarget) * 180) / Math.PI)}° or ${180 - Math.round((Math.asin(sinTarget) * 180) / Math.PI)}°.`}
+        feedback="idle"
+      />
     </View>
   );
 }
@@ -425,7 +419,7 @@ function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
       >
         <Text style={styles.lockButtonText}>{locking ? (nearPeak ? '🔒 Locked in!' : '🔓 Not yet…') : '🔒 HOLD AT PEAK'}</Text>
       </Pressable>
-      <Text style={styles.stageHint}>θ drifts on its own — press and hold right as sin(θ) crosses {peakThreshold.toFixed(2)}.</Text>
+      <HintExplanationPanel hint={`θ drifts on its own — press and hold right as sin(θ) crosses ${peakThreshold.toFixed(2)}, its peak zone.`} feedback="idle" />
     </View>
   );
 }
@@ -543,6 +537,7 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
 
       <Text style={styles.sliderLabel}>Phase: {Math.round(phase)}°</Text>
       <Slider style={styles.slider} minimumValue={0} maximumValue={360} step={1} value={phase} onValueChange={setPhase} minimumTrackTintColor={DL_COLORS.amethyst} maximumTrackTintColor={DL_COLORS.surfaceMuted} thumbTintColor={DL_COLORS.amethyst} />
+      <HintExplanationPanel hint="Amplitude sets the wave's height, frequency sets how many peaks fit in one cycle, and phase shifts it left or right." feedback="idle" />
     </View>
   );
 }
@@ -563,6 +558,8 @@ function buildTrigStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 60, message: 'In touching distance! Nudge it a hair closer.' },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage1Foundations,
+      skill: 'angle fundamentals',
+      fastClearMs: 30000,
     },
     {
       id: 'quantitative',
@@ -574,6 +571,8 @@ function buildTrigStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 50, message: 'So close — the sine value is almost exactly right!' },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage2QuantitativeMechanics,
+      skill: 'trigonometric ratios',
+      fastClearMs: 25000,
     },
     {
       id: 'variables',
@@ -584,6 +583,8 @@ function buildTrigStages(): MathStageConfig[] {
       toleranceThreshold: 0.001,
       checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
       renderCanvas: Stage3VariablesChallenge,
+      skill: 'unit-circle relationships',
+      fastClearMs: 30000,
     },
     {
       id: 'mastery',
@@ -594,6 +595,8 @@ function buildTrigStages(): MathStageConfig[] {
       toleranceThreshold: 0,
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage4MasterySandbox,
+      skill: 'applied trigonometry (waveforms)',
+      fastClearMs: 40000,
     },
   ];
 }

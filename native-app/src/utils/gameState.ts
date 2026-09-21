@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
+import { MODULES } from '../../theme';
 
 // The Hero's meta-progression: a single character level/title that sits above
 // every module's own 4-stage engine (see src/features/deep-learning). Each
@@ -37,6 +38,34 @@ export interface HeroState {
   title: string;
   /** Module keys (e.g. 'arithmetic') whose full 4-stage progression has been mastered. */
   clearedRealms: string[];
+  /** Lifetime totals across every realm/playthrough, for a real accuracy stat (not per-run). */
+  totalAttempts: number;
+  totalCorrect: number;
+  /** The longest correct-answer streak ever hit, in any realm. */
+  bestStreakEver: number;
+  /** Badge ids earned so far — see BADGES below for id → label/description. */
+  badges: string[];
+}
+
+export interface BadgeDef {
+  id: string;
+  label: string;
+  emoji: string;
+  description: string;
+}
+
+export const BADGES: BadgeDef[] = [
+  { id: 'first-blood', emoji: '🗡️', label: 'First Blood', description: 'Defeated your first guardian.' },
+  { id: 'perfectionist', emoji: '💎', label: 'Perfectionist', description: 'Cleared a realm without a single wrong answer.' },
+  { id: 'streak-master', emoji: '🔥', label: 'Streak Master', description: 'Hit a 5+ answer streak.' },
+  { id: 'hexad', emoji: '👑', label: 'Hexad', description: `Mastered all ${MODULES.length} realms.` },
+];
+
+/** Per-realm-completion stats a module reports once it clears its final stage, folded into the Hero's lifetime totals/badges. */
+export interface RunStats {
+  attempts: number;
+  correct: number;
+  bestStreak: number;
 }
 
 export interface AwardXpResult {
@@ -57,14 +86,26 @@ function titleForLevel(level: number): string {
   return title;
 }
 
-function buildState(totalXp: number, clearedRealms: string[] = []): HeroState {
+function buildState(
+  totalXp: number,
+  clearedRealms: string[] = [],
+  totalAttempts = 0,
+  totalCorrect = 0,
+  bestStreakEver = 0,
+  badges: string[] = []
+): HeroState {
   const level = levelForXp(totalXp);
-  return { totalXp, level, title: titleForLevel(level), clearedRealms };
+  return { totalXp, level, title: titleForLevel(level), clearedRealms, totalAttempts, totalCorrect, bestStreakEver, badges };
 }
 
 /** How far into the current level the Hero is, and how much the level spans — for an XP bar. */
 export function xpProgress(state: HeroState): { current: number; span: number } {
   return { current: state.totalXp % XP_PER_LEVEL, span: XP_PER_LEVEL };
+}
+
+/** Lifetime accuracy across every realm/playthrough, as a whole-number percentage. */
+export function heroAccuracyPct(state: HeroState): number {
+  return state.totalAttempts > 0 ? Math.round((state.totalCorrect / state.totalAttempts) * 100) : 100;
 }
 
 let state: HeroState = buildState(0);
@@ -90,8 +131,22 @@ export function hydrateGameState(): Promise<HeroState> {
   hydratePromise = AsyncStorage.getItem(STORAGE_KEY)
     .then((raw) => {
       if (raw) {
-        const saved = JSON.parse(raw) as { totalXp: number; clearedRealms?: string[] };
-        state = buildState(saved.totalXp ?? 0, saved.clearedRealms ?? []);
+        const saved = JSON.parse(raw) as {
+          totalXp: number;
+          clearedRealms?: string[];
+          totalAttempts?: number;
+          totalCorrect?: number;
+          bestStreakEver?: number;
+          badges?: string[];
+        };
+        state = buildState(
+          saved.totalXp ?? 0,
+          saved.clearedRealms ?? [],
+          saved.totalAttempts ?? 0,
+          saved.totalCorrect ?? 0,
+          saved.bestStreakEver ?? 0,
+          saved.badges ?? []
+        );
       }
       hydrated = true;
       notify();
@@ -114,10 +169,23 @@ export function subscribeGameState(listener: (next: HeroState) => void): () => v
   return () => listeners.delete(listener);
 }
 
+function withBadge(badges: string[], id: string): string[] {
+  return badges.includes(id) ? badges : [...badges, id];
+}
+
 /** Feeds a module's XP reward into the Hero's overall level. Returns whether it triggered a level-up. */
 export function awardXP(amount: number): AwardXpResult {
   const previousLevel = state.level;
-  state = buildState(state.totalXp + Math.max(0, Math.round(amount)), state.clearedRealms);
+  let badges = state.badges;
+  if (amount > 0) badges = withBadge(badges, 'first-blood');
+  state = buildState(
+    state.totalXp + Math.max(0, Math.round(amount)),
+    state.clearedRealms,
+    state.totalAttempts,
+    state.totalCorrect,
+    state.bestStreakEver,
+    badges
+  );
   persist();
   notify();
   return { didLevelUp: state.level > previousLevel, previousLevel, state };
@@ -126,7 +194,25 @@ export function awardXP(amount: number): AwardXpResult {
 /** Marks a module's realm as fully mastered (all 4 stages cleared). Idempotent. */
 export function markRealmCleared(realmId: string): void {
   if (state.clearedRealms.includes(realmId)) return;
-  state = buildState(state.totalXp, [...state.clearedRealms, realmId]);
+  const clearedRealms = [...state.clearedRealms, realmId];
+  let badges = state.badges;
+  if (clearedRealms.length >= MODULES.length) badges = withBadge(badges, 'hexad');
+  state = buildState(state.totalXp, clearedRealms, state.totalAttempts, state.totalCorrect, state.bestStreakEver, badges);
+  persist();
+  notify();
+}
+
+/** Folds one realm-completion's stats into the Hero's lifetime totals and awards any badge they unlock. Idempotent per call — call once per realm clear. */
+export function recordRunStats({ attempts, correct, bestStreak }: RunStats): void {
+  const totalAttempts = state.totalAttempts + attempts;
+  const totalCorrect = state.totalCorrect + correct;
+  const bestStreakEver = Math.max(state.bestStreakEver, bestStreak);
+
+  let badges = state.badges;
+  if (attempts > 0 && correct === attempts) badges = withBadge(badges, 'perfectionist');
+  if (bestStreak >= 5) badges = withBadge(badges, 'streak-master');
+
+  state = buildState(state.totalXp, state.clearedRealms, totalAttempts, totalCorrect, bestStreakEver, badges);
   persist();
   notify();
 }

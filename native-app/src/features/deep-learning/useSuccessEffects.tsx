@@ -6,6 +6,7 @@ import Animated, {
   SharedValue,
   useAnimatedProps,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSequence,
   withTiming,
@@ -65,6 +66,7 @@ export function ParticleBurst({ progress }: { progress: SharedValue<number> }) {
  * particle burst that fades out over ~600ms.
  */
 export function useSuccessEffects() {
+  const reducedMotion = useReducedMotion();
   const scale = useSharedValue(1);
   const burstProgress = useSharedValue(0);
   const [isBursting, setIsBursting] = useState(false);
@@ -78,6 +80,15 @@ export function useSuccessEffects() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     }
 
+    // Reduced motion still gets the haptic + a burst that fades without any
+    // scale pop or outward particle travel — a light flash, not motion.
+    if (reducedMotion) {
+      burstProgress.value = 1;
+      setIsBursting(true);
+      setTimeout(() => setIsBursting(false), 220);
+      return;
+    }
+
     scale.value = withSequence(
       withTiming(1.2, { duration: 150, easing: Easing.out(Easing.quad) }),
       withTiming(1, { duration: 250, easing: Easing.out(Easing.quad) })
@@ -87,7 +98,7 @@ export function useSuccessEffects() {
     burstProgress.value = withTiming(1, { duration: BURST_DURATION_MS, easing: Easing.out(Easing.cubic) });
     setIsBursting(true);
     setTimeout(() => setIsBursting(false), BURST_DURATION_MS + 60);
-  }, [scale, burstProgress]);
+  }, [scale, burstProgress, reducedMotion]);
 
   return { targetPopStyle, burstProgress, isBursting, trigger };
 }

@@ -1,10 +1,10 @@
-import { Sparkles, Trophy } from 'lucide-react-native';
+import { Flame, Sparkles, Target, Trophy } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { DL_COLORS } from '../features/deep-learning/theme';
 import { HERO_IDENTITY, MODULES } from '../../theme';
-import { useGameState, xpProgress } from '../utils/gameState';
+import { BADGES, heroAccuracyPct, useGameState, xpProgress } from '../utils/gameState';
 import { CharacterDetailModal } from './CharacterDetailModal';
 
 /** The left-column HUD card: portrait, name/title/level, live XP bar, and realms-cleared progress. Tapping the portrait opens a detail popup explaining who she is and what her level/XP represent. */
@@ -13,6 +13,7 @@ export function CharacterProfileCard() {
   const { current, span } = xpProgress(hero);
   const pct = Math.min(100, (current / span) * 100);
   const totalRealms = MODULES.length;
+  const accuracyPct = heroAccuracyPct(hero);
   const [detailOpen, setDetailOpen] = useState(false);
 
   return (
@@ -80,7 +81,31 @@ export function CharacterProfileCard() {
             {hero.clearedRealms.length}/{totalRealms}
           </Text>
         </View>
+        <View style={styles.statRow}>
+          <Target size={14} color={DL_COLORS.lime} strokeWidth={2.5} />
+          <Text style={styles.statLabel}>Overall Accuracy</Text>
+          <Text style={styles.statValue}>{accuracyPct}%</Text>
+        </View>
+        <View style={styles.statRow}>
+          <Flame size={14} color={DL_COLORS.lime} strokeWidth={2.5} />
+          <Text style={styles.statLabel}>Best Streak</Text>
+          <Text style={styles.statValue}>{hero.bestStreakEver}x</Text>
+        </View>
       </View>
+
+      {hero.badges.length > 0 && (
+        <View style={styles.badgesBlock}>
+          <Text style={styles.badgesHeading}>Badges</Text>
+          <View style={styles.badgesRow}>
+            {BADGES.filter((b) => hero.badges.includes(b.id)).map((b) => (
+              <View key={b.id} style={styles.badgePill} accessibilityLabel={`Badge earned: ${b.label} — ${b.description}`}>
+                <Text style={styles.badgeEmoji}>{b.emoji}</Text>
+                <Text style={styles.badgeLabel}>{b.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -214,5 +239,44 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: DL_COLORS.text,
+  },
+  badgesBlock: {
+    width: '100%',
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: DL_COLORS.border,
+    paddingTop: 12,
+    gap: 8,
+  },
+  badgesHeading: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: DL_COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  badgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: DL_COLORS.amethyst,
+    backgroundColor: DL_COLORS.amethystSoft,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  badgeEmoji: {
+    fontSize: 12,
+  },
+  badgeLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: DL_COLORS.amethyst,
   },
 });

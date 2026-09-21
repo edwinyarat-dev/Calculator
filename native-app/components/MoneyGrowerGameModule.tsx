@@ -2,7 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import Slider from '@react-native-community/slider';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import ReAnimated from 'react-native-reanimated';
+import { useDeepLearning } from '../src/features/deep-learning/DeepLearningContext';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
+import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
+import { clampScore, randomInt, scoreAgainst, shuffle } from '../src/features/deep-learning/mathUtils';
 import { EntryDisplay, NumericKeypad } from '../src/features/deep-learning/NumericKeypad';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
@@ -14,28 +17,6 @@ function compoundAmount(principal: number, ratePct: number, years: number): numb
 
 function fmtMoney(n: number): string {
   return '$' + Math.round(n).toLocaleString('en-US');
-}
-
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function clampScore(n: number): number {
-  return Math.max(0, Math.min(1, n));
-}
-
-/** How close a wrong final-round answer was, as a 0–1 score (see clampScore) — reported to the engine instead of the raw typed value so randomizing the problem each playthrough never desyncs the fixed win check. */
-function scoreAgainst(typed: number, answer: number): number {
-  return clampScore(1 - Math.abs(typed - answer) / Math.max(1, Math.abs(answer)));
-}
-
-function shuffle<T>(items: T[]): T[] {
-  const arr = [...items];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,9 +44,11 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
+  const { isNearMiss } = useDeepLearning();
 
   const isFinalRound = round === problems.length - 1;
   const problem = problems[round];
+  const interest = Math.round((problem.principal * problem.ratePct) / 100);
   const answer = Math.round(compoundAmount(problem.principal, problem.ratePct, 1));
 
   useEffect(() => {
@@ -122,7 +105,12 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
         )}
       </ReAnimated.View>
       <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
-      <Text style={styles.stageHint}>Add the interest on top of what you started with.</Text>
+      <HintExplanationPanel
+        hint={`Multiply $${problem.principal} by ${problem.ratePct}% to get the interest, then add it to $${problem.principal}.`}
+        explanation={feedback !== 'idle' ? `$${problem.principal} × ${problem.ratePct}% = $${interest} interest. $${problem.principal} + $${interest} = $${answer}.` : null}
+        feedback={feedback === 'idle' ? 'idle' : feedback === 'correct' ? 'correct' : isFinalRound && isNearMiss ? 'nearMiss' : 'wrong'}
+        disabled={feedback !== 'idle'}
+      />
     </View>
   );
 }
@@ -154,9 +142,11 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
+  const { isNearMiss } = useDeepLearning();
 
   const isFinalRound = round === problems.length - 1;
   const problem = problems[round];
+  const year1Balance = Math.round(compoundAmount(problem.principal, problem.ratePct, 1));
   const answer = Math.round(compoundAmount(problem.principal, problem.ratePct, problem.years));
 
   useEffect(() => {
@@ -213,7 +203,16 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         )}
       </ReAnimated.View>
       <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
-      <Text style={styles.stageHint}>Year 2 grows from Year 1's balance — not the original amount.</Text>
+      <HintExplanationPanel
+        hint="Each year grows from LAST year's balance, not the original amount — compound it one year at a time."
+        explanation={
+          feedback !== 'idle'
+            ? `Year 1: $${problem.principal} → $${year1Balance}.${problem.years > 1 ? ` Year 2: $${year1Balance} → $${answer}.` : ''}`
+            : null
+        }
+        feedback={feedback === 'idle' ? 'idle' : feedback === 'correct' ? 'correct' : isFinalRound && isNearMiss ? 'nearMiss' : 'wrong'}
+        disabled={feedback !== 'idle'}
+      />
     </View>
   );
 }
@@ -257,6 +256,7 @@ function Stage3RateRush({ onCommit, isActive }: StageCanvasProps) {
   const [flash, setFlash] = useState<'idle' | 'good' | 'bad'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
+  const { isNearMiss } = useDeepLearning();
 
   const isFinalRound = round === rounds.length - 1;
   const goal = rounds[round];
@@ -324,7 +324,16 @@ function Stage3RateRush({ onCommit, isActive }: StageCanvasProps) {
           {flash === 'good' ? '✓ Locked in!' : flash === 'bad' ? '✗ Not quite enough' : 'LOCK IN THIS RATE'}
         </Text>
       </Pressable>
-      <Text style={styles.stageHint}>The rate on offer keeps changing — a higher rate compounds into a much bigger balance over {STAGE3_YEARS} years.</Text>
+      <HintExplanationPanel
+        hint={`The rate on offer keeps changing — a higher rate compounds into a much bigger balance over ${STAGE3_YEARS} years. Don't lock in too early.`}
+        explanation={
+          flash !== 'idle'
+            ? `At ${currentRate}% for ${STAGE3_YEARS} years, ${fmtMoney(STAGE3_PRINCIPAL)} grows to ${fmtMoney(projected)} — that ${qualifies ? 'clears' : 'falls short of'} the ${fmtMoney(goal.target)} target for ${goal.savingFor}.`
+            : null
+        }
+        feedback={flash === 'idle' ? 'idle' : flash === 'good' ? 'correct' : isFinalRound && isNearMiss ? 'nearMiss' : 'wrong'}
+        disabled={flash !== 'idle'}
+      />
     </View>
   );
 }
@@ -420,6 +429,8 @@ function buildMoneyGrowerStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 15, message: "So close — remember, it's the starting amount PLUS the interest." },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage1Foundations,
+      skill: 'simple interest',
+      fastClearMs: 20000,
     },
     {
       id: 'quantitative',
@@ -431,6 +442,8 @@ function buildMoneyGrowerStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 10, message: 'Right idea — double-check you compounded the second year too.' },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage2QuantitativeMechanics,
+      skill: 'compound interest',
+      fastClearMs: 25000,
     },
     {
       id: 'variables',
@@ -442,6 +455,8 @@ function buildMoneyGrowerStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 15, message: 'So close — that rate almost got you there over 10 years.' },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage3RateRush,
+      skill: 'comparing growth scenarios',
+      fastClearMs: 20000,
     },
     {
       id: 'mastery',
@@ -452,6 +467,8 @@ function buildMoneyGrowerStages(): MathStageConfig[] {
       toleranceThreshold: 0,
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage4MasterySandbox,
+      skill: 'real-world financial planning',
+      fastClearMs: 30000,
     },
   ];
 }

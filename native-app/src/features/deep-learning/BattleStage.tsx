@@ -4,6 +4,7 @@ import { Image, ImageSourcePropType, Platform, Pressable, StyleSheet, Text, View
 import Animated, {
   Easing,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withDelay,
   withRepeat,
@@ -42,10 +43,12 @@ export interface BattleStageProps {
   totalStages: number;
   lastResult: 'won' | 'lost' | null;
   resultToken: number;
-  /** A near-miss is deliberately encouraging, not punishing — skip the hurt shake for it. */
+  /** A near-miss is deliberately encouraging, not punishing — skip the hurt shake, use a softer glow instead. */
   isNearMiss?: boolean;
   /** The real XP gained on the most recent win, shown as a floating reward number. */
   xpGain: number;
+  /** True when the win also landed inside the stage's "Swift Clear" window — shows an extra critical-hit flourish. */
+  wasCrit?: boolean;
   /** Increments on every tap/keystroke inside the Magic Deck below — not just a final
    * correct/wrong result — so the hero visibly channels energy while the player is
    * still mid-decision, not only after they commit. Carries no game data. */
@@ -93,11 +96,13 @@ export function BattleStage({
   resultToken,
   isNearMiss,
   xpGain,
+  wasCrit,
   channelPulse = 0,
   heroImageSource,
   enemyImageSource,
 }: BattleStageProps) {
   const hero = useGameState();
+  const reducedMotion = useReducedMotion();
   const [detailOpen, setDetailOpen] = useState<'hero' | 'guardian' | null>(null);
   const heroBob = useSharedValue(0);
   const enemyBob = useSharedValue(0);
@@ -112,14 +117,18 @@ export function BattleStage({
   const rewardOpacity = useSharedValue(0);
   const channelGlow = useSharedValue(0);
   const channelScale = useSharedValue(1);
+  const critTextOpacity = useSharedValue(0);
+  const critTextScale = useSharedValue(0.8);
+  const nearMissGlow = useSharedValue(0);
   const isFirstRender = useRef(true);
   const isFirstPulse = useRef(true);
 
   useEffect(() => {
+    if (reducedMotion) return;
     heroBob.value = withRepeat(withSequence(withTiming(-5, { duration: 1700 }), withTiming(0, { duration: 1700 })), -1, true);
     enemyBob.value = withRepeat(withSequence(withTiming(-7, { duration: 1500 }), withTiming(0, { duration: 1500 })), -1, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reducedMotion]);
 
   useEffect(() => {
     if (isFirstRender.current) {
@@ -129,13 +138,20 @@ export function BattleStage({
     if (lastResult === 'won') {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        if (wasCrit) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
       }
-      heroLurch.value = withSequence(withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 260 }));
+
+      if (!reducedMotion) {
+        heroLurch.value = withSequence(withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 260 }));
+        boltX.value = 0;
+        boltX.value = withTiming(1, { duration: 400, easing: Easing.in(Easing.quad) });
+      } else {
+        heroLurch.value = 0;
+        boltX.value = 1;
+      }
 
       boltOpacity.value = 0;
-      boltX.value = 0;
       boltOpacity.value = withSequence(withTiming(1, { duration: 60 }), withDelay(280, withTiming(0, { duration: 90 })));
-      boltX.value = withTiming(1, { duration: 400, easing: Easing.in(Easing.quad) });
 
       enemyHitFlash.value = withDelay(360, withSequence(withTiming(1, { duration: 70 }), withTiming(0, { duration: 220 })));
 
@@ -144,20 +160,38 @@ export function BattleStage({
 
       rewardY.value = 0;
       rewardOpacity.value = 0;
-      rewardY.value = withDelay(400, withTiming(-36, { duration: 700, easing: Easing.out(Easing.quad) }));
+      rewardY.value = withDelay(400, withTiming(reducedMotion ? 0 : -36, { duration: 700, easing: Easing.out(Easing.quad) }));
       rewardOpacity.value = withDelay(400, withSequence(withTiming(1, { duration: 120 }), withDelay(400, withTiming(0, { duration: 200 }))));
+
+      // A "Swift Clear" bonus (see DeepLearningContext) — a real crit flourish,
+      // not a per-question reflex check, since stages only report once.
+      if (wasCrit) {
+        critTextOpacity.value = 0;
+        critTextScale.value = 0.8;
+        critTextOpacity.value = withDelay(360, withSequence(withTiming(1, { duration: 100 }), withDelay(500, withTiming(0, { duration: 220 }))));
+        critTextScale.value = withDelay(360, withTiming(1, { duration: 180, easing: Easing.out(Easing.back(1.6)) }));
+      }
     } else if (lastResult === 'lost' && !isNearMiss) {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       }
-      heroShakeX.value = withSequence(
-        withTiming(-8, { duration: 55 }),
-        withTiming(8, { duration: 55 }),
-        withTiming(-6, { duration: 55 }),
-        withTiming(6, { duration: 55 }),
-        withTiming(0, { duration: 55 })
-      );
+      if (!reducedMotion) {
+        heroShakeX.value = withSequence(
+          withTiming(-8, { duration: 55 }),
+          withTiming(8, { duration: 55 }),
+          withTiming(-6, { duration: 55 }),
+          withTiming(6, { duration: 55 }),
+          withTiming(0, { duration: 55 })
+        );
+      }
       flash.value = withSequence(withTiming(1, { duration: 80 }), withTiming(0, { duration: 260 }));
+    } else if (lastResult === 'lost' && isNearMiss) {
+      // Encouraging, not punishing: a soft amethyst glow instead of the hurt shake/red flash —
+      // a visibly different reaction from an ordinary miss, not silence.
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      }
+      nearMissGlow.value = withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 420 }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultToken]);
@@ -204,6 +238,11 @@ export function BattleStage({
     opacity: rewardOpacity.value,
     transform: [{ translateY: rewardY.value }],
   }));
+  const critTextStyle = useAnimatedStyle(() => ({
+    opacity: critTextOpacity.value,
+    transform: [{ scale: critTextScale.value }],
+  }));
+  const nearMissGlowStyle = useAnimatedStyle(() => ({ opacity: nearMissGlow.value * 0.6 }));
 
   const focusPct = Math.max(0, 100 - (stageIndex / Math.max(1, totalStages)) * 100);
 
@@ -265,8 +304,17 @@ export function BattleStage({
         <Animated.Text style={[styles.rewardText, { left: ENEMY_X + PORTRAIT_SIZE * 0.2, top: PORTRAIT_Y - 4 }, rewardStyle]}>
           +{xpGain} XP
         </Animated.Text>
+        {wasCrit && (
+          <Animated.Text
+            style={[styles.critText, { left: ENEMY_X - 20, top: PORTRAIT_Y - 26 }, critTextStyle]}
+            accessibilityLabel="Swift Clear bonus"
+          >
+            ⚡ Swift Clear!
+          </Animated.Text>
+        )}
 
         <Animated.View style={[styles.hurtFlash, flashStyle]} pointerEvents="none" />
+        <Animated.View style={[styles.nearMissFlash, nearMissGlowStyle]} pointerEvents="none" />
       </View>
 
       <CharacterDetailModal
@@ -434,5 +482,21 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(255, 76, 76, 0.22)',
+  },
+  nearMissFlash: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(168, 85, 247, 0.18)',
+  },
+  critText: {
+    position: 'absolute',
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FBBF24',
+    textShadowColor: 'rgba(251, 191, 36, 0.8)',
+    textShadowRadius: 8,
   },
 });

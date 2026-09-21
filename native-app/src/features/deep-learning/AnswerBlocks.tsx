@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useBattlePulse } from './BattlePulseContext';
 import { DL_COLORS } from './theme';
 
@@ -45,6 +45,7 @@ function AnswerBlock({
   disabled?: boolean;
   onPress: () => void;
 }) {
+  const reducedMotion = useReducedMotion();
   const shake = useSharedValue(0);
   // A stable, per-block tilt and vertical offset — set once so a scattered
   // pile of blocks doesn't feel like a rigid grid, and doesn't re-jitter on
@@ -53,7 +54,7 @@ function AnswerBlock({
   const [liftY] = useState(() => randomInt(-4, 4));
 
   useEffect(() => {
-    if (state !== 'wrong') return;
+    if (state !== 'wrong' || reducedMotion) return;
     shake.value = withSequence(
       withTiming(-6, { duration: 45 }),
       withTiming(6, { duration: 45 }),
@@ -61,7 +62,7 @@ function AnswerBlock({
       withTiming(4, { duration: 45 }),
       withTiming(0, { duration: 45 })
     );
-  }, [state, shake]);
+  }, [state, shake, reducedMotion]);
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: shake.value }, { translateY: liftY }, { rotate: `${tilt}deg` }],

@@ -23,6 +23,27 @@ export interface StageCanvasProps {
   isActive: boolean;
 }
 
+/**
+ * A single generated question a stage is asking right now. Stages that use
+ * `pickDifficulty`/hints build these internally (see `mathUtils.ts`) — this
+ * type doesn't replace each stage's own bespoke problem shape (an angle, a
+ * dataset, an expression, …), it standardizes the *teaching* fields on top
+ * of whatever stage-specific fields a module already has, so a shared
+ * `HintExplanationPanel` can render any of them the same way.
+ */
+export interface MathProblem<TAnswer = number> {
+  id: string;
+  question: string;
+  answer: TAnswer;
+  acceptableAnswers?: TAnswer[];
+  difficulty: 'easy' | 'medium' | 'hard';
+  /** The concept this question actually exercises, e.g. "place value" or "compound interest". Shown in the realm-completion summary's "skills practiced" list. */
+  skill: string;
+  hint?: string;
+  /** Shown after answering (right or wrong) — the "why", not just the "what". */
+  explanation: string;
+}
+
 /** A single stage's configuration — the data any math module hands the deep-learning engine. */
 export interface MathStageConfig {
   id: string;
@@ -34,4 +55,8 @@ export interface MathStageConfig {
   nearMiss?: NearMissConfig;
   checkWinCondition: (value: number, target: number, tolerance: number) => boolean;
   renderCanvas: ComponentType<StageCanvasProps>;
+  /** The concept this stage exercises overall (falls back to per-problem `skill` when set) — surfaced in the realm-completion summary. */
+  skill?: string;
+  /** Clearing the whole stage faster than this earns a "Swift Clear" XP bonus. Measured from when the stage becomes active to when it's won, since stages only report a result once, on their final round — see ARCHITECTURE.md. */
+  fastClearMs?: number;
 }

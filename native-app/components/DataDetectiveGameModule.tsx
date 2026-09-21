@@ -3,7 +3,10 @@ import Slider from '@react-native-community/slider';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import ReAnimated from 'react-native-reanimated';
 import Svg, { Circle, Line } from 'react-native-svg';
+import { useDeepLearning } from '../src/features/deep-learning/DeepLearningContext';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
+import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
+import { clampScore, randomInt, scoreAgainst, shuffle } from '../src/features/deep-learning/mathUtils';
 import { EntryDisplay, NumericKeypad } from '../src/features/deep-learning/NumericKeypad';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
@@ -12,23 +15,6 @@ import { computeStats } from '../utils/statistics';
 
 function mean(values: number[]): number {
   return values.reduce((s, v) => s + v, 0) / values.length;
-}
-
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function clampScore(n: number): number {
-  return Math.max(0, Math.min(1, n));
-}
-
-function shuffle<T>(items: T[]): T[] {
-  const arr = [...items];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,11 +45,13 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
+  const { isNearMiss } = useDeepLearning();
 
   const isFinalRound = round === cases.length - 1;
   const caseData = cases[round];
   const stats = computeStats(caseData.values)!;
   const trueMedian = stats.median;
+  const sortedValues = [...caseData.values].sort((a, b) => a - b);
 
   useEffect(() => {
     finalRoundWonRef.current = false;
@@ -132,7 +120,12 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
           </View>
         )}
       </ReAnimated.View>
-      <Text style={styles.stageHint}>Sort them in your head first, then tap the one right in the middle.</Text>
+      <HintExplanationPanel
+        hint="Sort the values in your head first, then tap the one right in the middle."
+        explanation={feedback !== 'idle' ? `Sorted: ${sortedValues.join(', ')}. The middle value is ${trueMedian}.` : null}
+        feedback={feedback === 'idle' ? 'idle' : feedback === 'correct' ? 'correct' : isFinalRound && isNearMiss ? 'nearMiss' : 'wrong'}
+        disabled={feedback !== 'idle'}
+      />
     </View>
   );
 }
@@ -144,6 +137,8 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 interface CaseFile {
   prompt: string;
   answer: number;
+  hint: string;
+  explanation: string;
 }
 
 // Retries until six random measurements happen to average to a whole
@@ -153,10 +148,20 @@ function randomMeanCase(): CaseFile {
     const values = Array.from({ length: 6 }, () => randomInt(5, 40));
     const total = values.reduce((s, v) => s + v, 0);
     if (total % 6 === 0) {
-      return { prompt: `Case file: six shell casings were measured at ${values.join(', ')} mm. What is the MEAN measurement?`, answer: total / 6 };
+      return {
+        prompt: `Case file: six shell casings were measured at ${values.join(', ')} mm. What is the MEAN measurement?`,
+        answer: total / 6,
+        hint: 'Add every value together, then divide by how many values there are.',
+        explanation: `${values.join(' + ')} = ${total}. ${total} ÷ 6 = ${total / 6}.`,
+      };
     }
   }
-  return { prompt: 'Case file: six shell casings were measured at 10, 20, 30, 15, 25, 20 mm. What is the MEAN measurement?', answer: 20 };
+  return {
+    prompt: 'Case file: six shell casings were measured at 10, 20, 30, 15, 25, 20 mm. What is the MEAN measurement?',
+    answer: 20,
+    hint: 'Add every value together, then divide by how many values there are.',
+    explanation: '10 + 20 + 30 + 15 + 25 + 20 = 120. 120 ÷ 6 = 20.',
+  };
 }
 
 // Retries until the two middle (sorted) values of six random numbers sum to
@@ -166,10 +171,21 @@ function randomMedianCase(): CaseFile {
     const values = Array.from({ length: 6 }, () => randomInt(2, 25));
     const stats = computeStats(values);
     if (stats && Number.isInteger(stats.median)) {
-      return { prompt: `Case file: a getaway car was clocked over six blocks at ${values.join(', ')} seconds per block. What is the MEDIAN time?`, answer: stats.median };
+      const sorted = [...values].sort((a, b) => a - b);
+      return {
+        prompt: `Case file: a getaway car was clocked over six blocks at ${values.join(', ')} seconds per block. What is the MEDIAN time?`,
+        answer: stats.median,
+        hint: 'Sort the values, then average the two in the middle (there are six, so no single exact middle).',
+        explanation: `Sorted: ${sorted.join(', ')}. The middle two are ${sorted[2]} and ${sorted[3]}, averaging to ${stats.median}.`,
+      };
     }
   }
-  return { prompt: 'Case file: a getaway car was clocked over six blocks at 3, 7, 9, 11, 13, 17 seconds per block. What is the MEDIAN time?', answer: 10 };
+  return {
+    prompt: 'Case file: a getaway car was clocked over six blocks at 3, 7, 9, 11, 13, 17 seconds per block. What is the MEDIAN time?',
+    answer: 10,
+    hint: 'Sort the values, then average the two in the middle.',
+    explanation: 'Sorted: 3, 7, 9, 11, 13, 17. The middle two are 9 and 11, averaging to 10.',
+  };
 }
 
 // Retries until one value appears more often than any other, so the mode is unambiguous.
@@ -179,19 +195,24 @@ function randomModeCase(): CaseFile {
     const values = shuffle([modeValue, modeValue, modeValue, randomInt(3, 10), randomInt(3, 10), randomInt(3, 10)]);
     const stats = computeStats(values);
     if (stats && stats.modes.length === 1 && stats.modes[0] === modeValue) {
-      return { prompt: `Case file: six witnesses reported the suspect wearing shoe size ${values.join(', ')}. What is the MODE (most common size)?`, answer: modeValue };
+      return {
+        prompt: `Case file: six witnesses reported the suspect wearing shoe size ${values.join(', ')}. What is the MODE (most common size)?`,
+        answer: modeValue,
+        hint: 'The mode is just whichever value shows up most often.',
+        explanation: `Size ${modeValue} appears 3 times — more than any other size reported.`,
+      };
     }
   }
-  return { prompt: 'Case file: six witnesses reported the suspect wearing shoe size 5, 7, 5, 9, 5, 3. What is the MODE (most common size)?', answer: 5 };
+  return {
+    prompt: 'Case file: six witnesses reported the suspect wearing shoe size 5, 7, 5, 9, 5, 3. What is the MODE (most common size)?',
+    answer: 5,
+    hint: 'The mode is just whichever value shows up most often.',
+    explanation: 'Size 5 appears 3 times — more than any other size reported.',
+  };
 }
 
 function generateStage2Cases(): CaseFile[] {
   return [randomMeanCase(), randomMedianCase(), randomModeCase()];
-}
-
-/** How close a wrong final-round answer was, as a 0–1 score — reported instead of the raw typed value so randomized problems can't desync the fixed win check. */
-function scoreAgainst(typed: number, answer: number): number {
-  return clampScore(1 - Math.abs(typed - answer) / Math.max(1, Math.abs(answer)));
 }
 
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
@@ -201,6 +222,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
+  const { isNearMiss } = useDeepLearning();
 
   const isFinalRound = round === cases.length - 1;
   const problem = cases[round];
@@ -255,6 +277,12 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         )}
       </ReAnimated.View>
       <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
+      <HintExplanationPanel
+        hint={problem.hint}
+        explanation={feedback !== 'idle' ? problem.explanation : null}
+        feedback={feedback === 'idle' ? 'idle' : feedback === 'correct' ? 'correct' : isFinalRound && isNearMiss ? 'nearMiss' : 'wrong'}
+        disabled={feedback !== 'idle'}
+      />
     </View>
   );
 }
@@ -300,6 +328,7 @@ function Stage3RunningAverage({ onCommit, isActive }: StageCanvasProps) {
   const [flash, setFlash] = useState<'idle' | 'good' | 'bad'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
+  const { isNearMiss } = useDeepLearning();
 
   const isFinalRound = round === rounds.length - 1;
   const goal = rounds[round];
@@ -364,7 +393,16 @@ function Stage3RunningAverage({ onCommit, isActive }: StageCanvasProps) {
           {flash === 'good' ? '✓ Case locked!' : flash === 'bad' ? '✗ Not enough evidence yet' : 'LOCK IN THE CASE'}
         </Text>
       </Pressable>
-      <Text style={styles.stageHint}>New reports keep arriving — one low report can drag the average back down.</Text>
+      <HintExplanationPanel
+        hint="New reports keep arriving — one low report can drag the average back down, so don't lock in the first good moment."
+        explanation={
+          flash !== 'idle'
+            ? `Reports so far: ${revealed.join(', ')}. Their average is ${runningMean.toFixed(1)}, which ${qualifies ? 'clears' : 'falls short of'} the ${goal.target} needed for ${goal.story}.`
+            : null
+        }
+        feedback={flash === 'idle' ? 'idle' : flash === 'good' ? 'correct' : isFinalRound && isNearMiss ? 'nearMiss' : 'wrong'}
+        disabled={flash !== 'idle'}
+      />
     </View>
   );
 }
@@ -488,6 +526,10 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
           />
         </View>
       ))}
+      <HintExplanationPanel
+        hint="Mean is the average of all five estimates; range is the gap between the tallest and shortest. Tune the sliders to hit both targets."
+        feedback="idle"
+      />
     </View>
   );
 }
@@ -508,6 +550,8 @@ function buildDataDetectiveStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 40, message: "Close — remember to sort them first, then find the one in the middle." },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage1Foundations,
+      skill: 'reading data by eye (median)',
+      fastClearMs: 20000,
     },
     {
       id: 'quantitative',
@@ -519,6 +563,8 @@ function buildDataDetectiveStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 15, message: "Close — double-check which measure of the data you were asked for." },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage2QuantitativeMechanics,
+      skill: 'mean, median, and mode',
+      fastClearMs: 25000,
     },
     {
       id: 'variables',
@@ -530,6 +576,8 @@ function buildDataDetectiveStages(): MathStageConfig[] {
       nearMiss: { thresholdPercent: 8, message: "So close — one more strong report would have tipped the average." },
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage3RunningAverage,
+      skill: 'tracking a running average over time',
+      fastClearMs: 25000,
     },
     {
       id: 'mastery',
@@ -540,6 +588,8 @@ function buildDataDetectiveStages(): MathStageConfig[] {
       toleranceThreshold: 0,
       checkWinCondition: (value, target) => value >= target,
       renderCanvas: Stage4MasterySandbox,
+      skill: 'multi-step dataset interpretation',
+      fastClearMs: 35000,
     },
   ];
 }

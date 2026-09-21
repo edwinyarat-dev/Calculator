@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
-import { awardXP, markRealmCleared, useGameState } from '../../utils/gameState';
+import { awardXP, markRealmCleared, recordRunStats, useGameState } from '../../utils/gameState';
 import { HERO_IDENTITY, MODULES } from '../../../theme';
 import { BattlePulseProvider } from './BattlePulseContext';
 import { BattleStage } from './BattleStage';
@@ -164,20 +164,53 @@ export function StageCompleteBanner({
   );
 }
 
-/** Pops up over the whole screen once a player clears every stage of a realm — distinct from the inline per-stage banner since finishing a realm is a bigger moment worth interrupting the view for. */
+/** A single labeled number in the realm-complete summary grid. */
+function SummaryStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryStat}>
+      <Text style={styles.summaryStatValue}>{value}</Text>
+      <Text style={styles.summaryStatLabel}>{label}</Text>
+    </View>
+  );
+}
+
+/**
+ * Pops up over the whole screen once a player clears every stage of a realm — a real
+ * educational debrief (guardian defeated, XP, accuracy, streak, skills practiced,
+ * mistakes/near-misses), not just a "Victory" banner. Distinct from the inline
+ * per-stage banner since finishing a realm is a bigger moment worth interrupting the
+ * view for. The world map stays visible behind/around this screen (`RealmViewport` is
+ * an always-present rail, not a separate destination), so "Play Again" already leaves
+ * the player free to pick a different realm next.
+ */
 export function RealmCompleteModal({
   visible,
   realmTitle,
   realmEmoji,
+  guardianName,
   xpEarned,
+  totalAttempts,
+  totalCorrect,
+  totalNearMisses,
+  bestStreakEver,
+  skillsPracticed,
   onPlayAgain,
 }: {
   visible: boolean;
   realmTitle: string;
   realmEmoji: string;
+  guardianName: string;
   xpEarned: number;
+  totalAttempts: number;
+  totalCorrect: number;
+  totalNearMisses: number;
+  bestStreakEver: number;
+  skillsPracticed: string[];
   onPlayAgain: () => void;
 }) {
+  const mistakes = Math.max(0, totalAttempts - totalCorrect - totalNearMisses);
+  const accuracyPct = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 100;
+
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onPlayAgain}>
       <View style={styles.modalBackdrop}>
@@ -185,13 +218,40 @@ export function RealmCompleteModal({
           <Text style={styles.modalEmoji}>{realmEmoji} 🏆</Text>
           <Text style={styles.modalTitle}>Realm Complete!</Text>
           <Text style={styles.modalSubtitle}>
-            Congrats — you mastered every stage of {realmTitle} and earned {xpEarned} XP!
+            You defeated the {guardianName} and mastered every stage of {realmTitle}.
           </Text>
+
+          <View style={styles.summaryGrid}>
+            <SummaryStat label="XP Earned" value={`+${xpEarned}`} />
+            <SummaryStat label="Accuracy" value={`${accuracyPct}%`} />
+            <SummaryStat label="Best Streak" value={`${bestStreakEver}x`} />
+            <SummaryStat label="Near Misses" value={`${totalNearMisses}`} />
+          </View>
+
+          {mistakes > 0 && (
+            <Text style={styles.summaryMistakes}>
+              {mistakes} question{mistakes === 1 ? '' : 's'} missed along the way — that's how the magic sticks.
+            </Text>
+          )}
+
+          {skillsPracticed.length > 0 && (
+            <View style={styles.skillsWrap}>
+              <Text style={styles.skillsLabel}>Skills practiced</Text>
+              <View style={styles.skillsPillRow}>
+                {skillsPracticed.map((skill) => (
+                  <View key={skill} style={styles.skillPill}>
+                    <Text style={styles.skillPillText}>{skill}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
           <Pressable
             style={styles.continueButton}
             onPress={onPlayAgain}
             accessibilityRole="button"
-            accessibilityLabel="Play again"
+            accessibilityLabel="Play again with a fresh set of questions"
           >
             <Text style={styles.continueButtonText}>Play Again ↻</Text>
           </Pressable>
@@ -202,8 +262,25 @@ export function RealmCompleteModal({
 }
 
 function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: string; onRestart: () => void }) {
-  const { stages, activeStageIndex, activeStage, unlockedStages, submitInput, goToStage, lastResult, resultToken, isNearMiss, streakCount, xpEarned } =
-    useDeepLearning();
+  const {
+    stages,
+    activeStageIndex,
+    activeStage,
+    unlockedStages,
+    submitInput,
+    goToStage,
+    lastResult,
+    resultToken,
+    isNearMiss,
+    streakCount,
+    xpEarned,
+    wasCrit,
+    totalAttempts,
+    totalCorrect,
+    totalNearMisses,
+    bestStreakEver,
+    skillsPracticed,
+  } = useDeepLearning();
   const [showBanner, setShowBanner] = useState(false);
   const [lastXpGain, setLastXpGain] = useState(0);
   const [hp, setHp] = useState(MAX_HP);
@@ -216,20 +293,28 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
   const isFinalStage = activeStageIndex === stages.length - 1;
   const realmMeta = MODULES.find((m) => m.key === realmId);
 
+  // Mirror this module's own XP economy into the app-wide Hero character —
+  // each module keeps running its local engine unchanged; this just feeds the
+  // delta since last mirror into the global level/title system. Keyed off
+  // `xpEarned` itself (not `lastResult === 'won'`) so a near-miss's one-time
+  // partial-credit XP reaches the Hero store too, not just full clears.
   useEffect(() => {
-    if (lastResult !== 'won') return;
-    setShowBanner(true);
-
-    // Mirror this module's own XP economy into the app-wide Hero character —
-    // each module keeps running its local engine unchanged; this just feeds
-    // the delta since last win into the global level/title system.
     const delta = xpEarned - prevXpRef.current;
     if (delta > 0) {
       awardXP(delta);
-      setLastXpGain(delta);
+      if (lastResult === 'won') setLastXpGain(delta);
       prevXpRef.current = xpEarned;
     }
-    if (isFinalStage && realmId) markRealmCleared(realmId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [xpEarned]);
+
+  useEffect(() => {
+    if (lastResult !== 'won') return;
+    setShowBanner(true);
+    if (isFinalStage) {
+      if (realmId) markRealmCleared(realmId);
+      recordRunStats({ attempts: totalAttempts, correct: totalCorrect, bestStreak: bestStreakEver });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastResult, activeStageIndex]);
 
@@ -286,6 +371,7 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
             resultToken={resultToken}
             isNearMiss={isNearMiss}
             xpGain={lastXpGain}
+            wasCrit={wasCrit}
             channelPulse={pulseToken}
           />
           <Text style={styles.stageTitle}>{activeStage.title}</Text>
@@ -311,7 +397,13 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
         visible={showBanner && isFinalStage}
         realmTitle={realmMeta?.title ?? 'this realm'}
         realmEmoji={realmMeta?.emoji ?? '🏆'}
+        guardianName={realmMeta?.guardianName ?? 'the guardian'}
         xpEarned={xpEarned}
+        totalAttempts={totalAttempts}
+        totalCorrect={totalCorrect}
+        totalNearMisses={totalNearMisses}
+        bestStreakEver={bestStreakEver}
+        skillsPracticed={skillsPracticed}
         onPlayAgain={handleContinue}
       />
     </View>
@@ -548,5 +640,74 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: DL_COLORS.text,
     textAlign: 'center',
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+    width: '100%',
+  },
+  summaryStat: {
+    minWidth: 76,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: DL_COLORS.lime,
+    backgroundColor: 'rgba(11, 15, 25, 0.35)',
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  summaryStatValue: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: DL_COLORS.lime,
+  },
+  summaryStatLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: DL_COLORS.text,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  summaryMistakes: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: DL_COLORS.text,
+    textAlign: 'center',
+    paddingHorizontal: 6,
+  },
+  skillsWrap: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 6,
+  },
+  skillsLabel: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: DL_COLORS.text,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  skillsPillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  skillPill: {
+    borderWidth: 1,
+    borderColor: DL_COLORS.amethyst,
+    backgroundColor: DL_COLORS.amethystSoft,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  skillPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: DL_COLORS.amethyst,
   },
 });
