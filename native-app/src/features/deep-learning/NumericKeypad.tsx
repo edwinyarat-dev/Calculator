@@ -1,5 +1,7 @@
+import { Wand2 } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { DL_COLORS } from './theme';
 
 // Shared across every module that answers a stage by typing digits rather
@@ -62,7 +64,17 @@ export function NumericKeypad({ onDigit, onBackspace, onSubmit, disabled }: Nume
           accessibilityRole="button"
           accessibilityLabel="Check answer"
         >
-          <Text style={styles.keypadKeySubmitText}>✓</Text>
+          <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+            <Defs>
+              <LinearGradient id="castGradient" x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0%" stopColor={DL_COLORS.sky} />
+                <Stop offset="100%" stopColor={DL_COLORS.amethyst} />
+              </LinearGradient>
+            </Defs>
+            <Rect x={0} y={0} width="100%" height="100%" rx={14} fill="url(#castGradient)" />
+          </Svg>
+          <Wand2 size={18} color="#FFFFFF" strokeWidth={2.5} />
+          <Text style={styles.keypadKeySubmitText}>Cast</Text>
         </Pressable>
       </View>
     </View>
@@ -95,8 +107,23 @@ export function EntryDisplay({ prompt, entry, feedback, prefix }: EntryDisplayPr
       >
         <Text style={styles.entryText}>{entry ? `${prefix ?? ''}${entry}` : '?'}</Text>
       </View>
+      <View style={styles.chargeHeader}>
+        <Wand2 size={12} color={DL_COLORS.sky} strokeWidth={2.5} />
+        <Text style={styles.chargeLabel}>Spell Charge</Text>
+      </View>
       <View style={styles.chargeTrack}>
-        <View style={[styles.chargeFill, { width: `${chargePct}%` }, chargePct >= 100 && styles.chargeFillReady]} />
+        <View style={[styles.chargeFillWrap, { width: `${chargePct}%` }]}>
+          <Svg width={160} height="100%" style={StyleSheet.absoluteFill}>
+            <Defs>
+              <LinearGradient id="chargeGradient" x1="0" y1="0" x2="1" y2="0">
+                <Stop offset="0%" stopColor={DL_COLORS.sky} />
+                <Stop offset="50%" stopColor={DL_COLORS.amethyst} />
+                <Stop offset="100%" stopColor={DL_COLORS.sky} />
+              </LinearGradient>
+            </Defs>
+            <Rect x={0} y={0} width="100%" height="100%" fill="url(#chargeGradient)" />
+          </Svg>
+        </View>
       </View>
     </View>
   );
@@ -137,24 +164,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: DL_COLORS.text,
   },
+  chargeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  chargeLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: DL_COLORS.sky,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
   chargeTrack: {
     width: '100%',
     maxWidth: 160,
     height: 6,
     borderRadius: 999,
-    backgroundColor: DL_COLORS.surfaceMuted,
+    backgroundColor: DL_COLORS.skySoft,
     overflow: 'hidden',
   },
-  chargeFill: {
+  chargeFillWrap: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: DL_COLORS.amethyst,
-  },
-  chargeFillReady: {
-    backgroundColor: DL_COLORS.lime,
-    shadowColor: DL_COLORS.lime,
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
+    overflow: 'hidden',
   },
   keypad: {
     width: '100%',
@@ -198,13 +231,17 @@ const styles = StyleSheet.create({
     flex: 1,
     aspectRatio: 1.6,
     borderRadius: 14,
-    backgroundColor: DL_COLORS.lime,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    overflow: 'hidden',
   },
   keypadKeySubmitText: {
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '800',
-    color: DL_COLORS.bgDeep,
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

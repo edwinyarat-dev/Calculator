@@ -52,6 +52,8 @@ export interface ModuleMeta {
   emoji: string;
   accent: string;
   accentDark: string;
+  /** The guardian this realm's battle arena depicts — flavor text only, no combat math attached. */
+  guardianName: string;
 }
 
 export const MODULES: ModuleMeta[] = [
@@ -62,6 +64,7 @@ export const MODULES: ModuleMeta[] = [
     emoji: '🥷',
     accent: theme.color.tangerine,
     accentDark: theme.color.tangerineDark,
+    guardianName: 'Digit Golem',
   },
   {
     key: 'compoundInterest',
@@ -70,6 +73,7 @@ export const MODULES: ModuleMeta[] = [
     emoji: '🌱',
     accent: theme.color.sunshine,
     accentDark: theme.color.sunshineDark,
+    guardianName: 'Debt Specter',
   },
   {
     key: 'geometry',
@@ -78,6 +82,7 @@ export const MODULES: ModuleMeta[] = [
     emoji: '📐',
     accent: theme.color.grape,
     accentDark: theme.color.grapeDark,
+    guardianName: 'Prism Warden',
   },
   {
     key: 'statistics',
@@ -86,6 +91,7 @@ export const MODULES: ModuleMeta[] = [
     emoji: '🕵️‍♀️',
     accent: theme.color.mint,
     accentDark: theme.color.mintDark,
+    guardianName: 'Noise Phantom',
   },
   {
     key: 'trigonometry',
@@ -94,6 +100,7 @@ export const MODULES: ModuleMeta[] = [
     emoji: '🌀',
     accent: theme.color.sky,
     accentDark: theme.color.skyDark,
+    guardianName: 'Vortex Maw',
   },
   {
     key: 'calculus',
@@ -102,5 +109,6 @@ export const MODULES: ModuleMeta[] = [
     emoji: '🚀',
     accent: theme.color.coral,
     accentDark: theme.color.coralDark,
+    guardianName: 'Infinity Wraith',
   },
 ];

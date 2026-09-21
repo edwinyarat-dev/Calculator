@@ -138,6 +138,7 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
   const { stages, activeStageIndex, activeStage, unlockedStages, submitInput, goToStage, lastResult, resultToken, xpEarned } =
     useDeepLearning();
   const [showBanner, setShowBanner] = useState(false);
+  const [lastXpGain, setLastXpGain] = useState(0);
   const prevXpRef = useRef(0);
 
   const isFinalStage = activeStageIndex === stages.length - 1;
@@ -153,6 +154,7 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
     const delta = xpEarned - prevXpRef.current;
     if (delta > 0) {
       awardXP(delta);
+      setLastXpGain(delta);
       prevXpRef.current = xpEarned;
     }
     if (isFinalStage && realmId) markRealmCleared(realmId);
@@ -177,10 +179,12 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
       <BattleStage
         realmTitle={realmMeta?.title ?? 'Realm'}
         realmEmoji={realmMeta?.emoji ?? '🧙'}
+        guardianName={realmMeta?.guardianName ?? 'Guardian'}
         stageIndex={activeStageIndex}
         totalStages={stages.length}
         lastResult={lastResult}
         resultToken={resultToken}
+        xpGain={lastXpGain}
       />
       <Text style={styles.stageTitle}>{activeStage.title}</Text>
       <NearMissBanner />

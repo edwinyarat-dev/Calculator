@@ -17,4 +17,14 @@ export const DL_COLORS = {
   amethyst: '#9D4EDD',
   amethystSoft: 'rgba(157, 78, 221, 0.18)',
   amethystGlow: 'rgba(157, 78, 221, 0.55)',
+
+  sky: '#38BDF8',
+  skySoft: 'rgba(56, 189, 248, 0.15)',
+  skyGlow: 'rgba(56, 189, 248, 0.6)',
+
+  danger: '#F87171',
+  dangerSoft: 'rgba(248, 113, 113, 0.15)',
+  dangerGlow: 'rgba(248, 113, 113, 0.55)',
+
+  reward: '#E879F9',
 };
