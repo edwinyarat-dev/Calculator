@@ -3,8 +3,8 @@ import { StyleSheet, View } from 'react-native';
 import ArithmeticGameModule from '../../components/ArithmeticGameModule';
 import CalculusLimitVisualizer from '../../components/CalculusLimitVisualizer';
 import DataStatisticsModule from '../../components/DataStatisticsModule';
-import GeometryModule from '../../components/GeometryModule';
 import MoneyGrowerGameModule from '../../components/MoneyGrowerGameModule';
+import ShapeArchitectGameModule from '../../components/ShapeArchitectGameModule';
 import TrigonometryGameModule from '../../components/TrigonometryGameModule';
 import { ModuleKey } from '../../theme';
 import { DL_COLORS } from '../features/deep-learning/theme';
@@ -22,7 +22,7 @@ const REALM_COMPONENTS: Record<ModuleKey, React.ComponentType> = {
   arithmetic: ArithmeticGameModule,
   trigonometry: TrigonometryGameModule,
   compoundInterest: MoneyGrowerGameModule,
-  geometry: GeometryModule,
+  geometry: ShapeArchitectGameModule,
   statistics: DataStatisticsModule,
   calculus: CalculusLimitVisualizer,
 };
