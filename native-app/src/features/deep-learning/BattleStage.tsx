@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useRef } from 'react';
-import { Image, ImageSourcePropType, Platform, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Image, ImageSourcePropType, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -11,6 +11,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
+import { CharacterDetailModal } from '../../components/CharacterDetailModal';
+import { useGameState } from '../../utils/gameState';
+import { HERO_IDENTITY } from '../../../theme';
 import { ParticleBurst } from './useSuccessEffects';
 import { DL_COLORS } from './theme';
 
@@ -33,6 +36,8 @@ export interface BattleStageProps {
   realmTitle: string;
   realmEmoji: string;
   guardianName: string;
+  guardianEmoji: string;
+  guardianPurpose: string;
   stageIndex: number;
   totalStages: number;
   lastResult: 'won' | 'lost' | null;
@@ -76,6 +81,8 @@ export function BattleStage({
   realmTitle,
   realmEmoji,
   guardianName,
+  guardianEmoji,
+  guardianPurpose,
   stageIndex,
   totalStages,
   lastResult,
@@ -85,6 +92,8 @@ export function BattleStage({
   heroImageSource,
   enemyImageSource,
 }: BattleStageProps) {
+  const hero = useGameState();
+  const [detailOpen, setDetailOpen] = useState<'hero' | 'guardian' | null>(null);
   const heroBob = useSharedValue(0);
   const enemyBob = useSharedValue(0);
   const heroShakeX = useSharedValue(0);
@@ -190,22 +199,36 @@ export function BattleStage({
       <View style={styles.arena}>
         <ArenaBackdrop />
 
-        <Animated.View style={[styles.portrait, { left: HERO_X, top: PORTRAIT_Y }, heroStyle]}>
-          {heroImageSource ? (
-            <Image source={heroImageSource} style={styles.portraitImage} resizeMode="contain" />
-          ) : (
-            <Text style={styles.portraitEmoji}>🧙‍♂️</Text>
-          )}
-        </Animated.View>
+        <Pressable
+          style={[styles.portraitTouchable, { left: HERO_X, top: PORTRAIT_Y }]}
+          onPress={() => setDetailOpen('hero')}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${HERO_IDENTITY.name}'s character details`}
+        >
+          <Animated.View style={[styles.portrait, heroStyle]}>
+            {heroImageSource ? (
+              <Image source={heroImageSource} style={styles.portraitImage} resizeMode="contain" />
+            ) : (
+              <Text style={styles.portraitEmoji}>{HERO_IDENTITY.emoji}</Text>
+            )}
+          </Animated.View>
+        </Pressable>
 
-        <Animated.View style={[styles.portrait, styles.enemyPortrait, { left: ENEMY_X, top: PORTRAIT_Y }, enemyStyle]}>
-          {enemyImageSource ? (
-            <Image source={enemyImageSource} style={styles.portraitImage} resizeMode="contain" />
-          ) : (
-            <Text style={styles.portraitEmoji}>👹</Text>
-          )}
-          <Animated.View style={[styles.enemyHitOverlay, enemyHitStyle]} pointerEvents="none" />
-        </Animated.View>
+        <Pressable
+          style={[styles.portraitTouchable, { left: ENEMY_X, top: PORTRAIT_Y }]}
+          onPress={() => setDetailOpen('guardian')}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${guardianName}'s character details`}
+        >
+          <Animated.View style={[styles.portrait, styles.enemyPortrait, enemyStyle]}>
+            {enemyImageSource ? (
+              <Image source={enemyImageSource} style={styles.portraitImage} resizeMode="contain" />
+            ) : (
+              <Text style={styles.portraitEmoji}>{guardianEmoji}</Text>
+            )}
+            <Animated.View style={[styles.enemyHitOverlay, enemyHitStyle]} pointerEvents="none" />
+          </Animated.View>
+        </Pressable>
 
         <Animated.View style={[styles.bolt, { top: PORTRAIT_Y + PORTRAIT_SIZE * 0.45 }, boltStyle]} pointerEvents="none" />
 
@@ -219,6 +242,25 @@ export function BattleStage({
 
         <Animated.View style={[styles.hurtFlash, flashStyle]} pointerEvents="none" />
       </View>
+
+      <CharacterDetailModal
+        visible={detailOpen === 'hero'}
+        onClose={() => setDetailOpen(null)}
+        emoji={HERO_IDENTITY.emoji}
+        name={HERO_IDENTITY.name}
+        subtitle={`Level ${hero.level} ${hero.title}`}
+        purpose={HERO_IDENTITY.purpose}
+        accentColor={DL_COLORS.amethyst}
+      />
+      <CharacterDetailModal
+        visible={detailOpen === 'guardian'}
+        onClose={() => setDetailOpen(null)}
+        emoji={guardianEmoji}
+        name={guardianName}
+        subtitle={`Guardian of ${realmTitle}`}
+        purpose={guardianPurpose}
+        accentColor={DL_COLORS.danger}
+      />
     </View>
   );
 }
@@ -290,10 +332,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: DL_COLORS.bgDeep,
   },
-  portrait: {
+  portraitTouchable: {
     position: 'absolute',
     width: PORTRAIT_SIZE,
     height: PORTRAIT_SIZE,
+  },
+  portrait: {
+    width: '100%',
+    height: '100%',
     borderRadius: 16,
     borderWidth: 2,
     borderColor: DL_COLORS.amethyst,

@@ -1,31 +1,46 @@
 import { Sparkles, Trophy } from 'lucide-react-native';
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { DL_COLORS } from '../features/deep-learning/theme';
-import { MODULES } from '../../theme';
+import { HERO_IDENTITY, MODULES } from '../../theme';
 import { useGameState, xpProgress } from '../utils/gameState';
+import { CharacterDetailModal } from './CharacterDetailModal';
 
-const HERO_NAME = 'Aria Vex';
-
-/** The left-column HUD card: portrait, name/title/level, live XP bar, and realms-cleared progress. */
+/** The left-column HUD card: portrait, name/title/level, live XP bar, and realms-cleared progress. Tapping the portrait opens a detail popup explaining who she is and what her level/XP represent. */
 export function CharacterProfileCard() {
   const hero = useGameState();
   const { current, span } = xpProgress(hero);
   const pct = Math.min(100, (current / span) * 100);
   const totalRealms = MODULES.length;
+  const [detailOpen, setDetailOpen] = useState(false);
 
   return (
     <View style={styles.card}>
-      <View style={styles.portraitFrame}>
-        <Text style={styles.portraitEmoji}>🧙‍♀️</Text>
+      <Pressable
+        style={styles.portraitFrame}
+        onPress={() => setDetailOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${HERO_IDENTITY.name}'s character details`}
+      >
+        <Text style={styles.portraitEmoji}>{HERO_IDENTITY.emoji}</Text>
         <View style={styles.levelBadge}>
           <Text style={styles.levelBadgeText}>{hero.level}</Text>
         </View>
-      </View>
+      </Pressable>
 
       <Text style={styles.title}>{hero.title}</Text>
-      <Text style={styles.heroName}>{HERO_NAME}</Text>
+      <Text style={styles.heroName}>{HERO_IDENTITY.name}</Text>
+
+      <CharacterDetailModal
+        visible={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        emoji={HERO_IDENTITY.emoji}
+        name={HERO_IDENTITY.name}
+        subtitle={`Level ${hero.level} ${hero.title}`}
+        purpose={HERO_IDENTITY.purpose}
+        accentColor={DL_COLORS.amethyst}
+      />
 
       <View style={styles.statBar}>
         <View style={styles.statBarHeader}>

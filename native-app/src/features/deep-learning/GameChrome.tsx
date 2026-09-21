@@ -2,14 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { awardXP, markRealmCleared, useGameState } from '../../utils/gameState';
-import { MODULES } from '../../../theme';
+import { HERO_IDENTITY, MODULES } from '../../../theme';
 import { BattleStage } from './BattleStage';
 import { DeepLearningProvider, useDeepLearning } from './DeepLearningContext';
 import LevelSelector from './LevelSelector';
 import { DL_COLORS } from './theme';
 import type { MathStageConfig } from './types';
 
-const HERO_NAME = 'Aria Vex';
 const MAX_HP = 100;
 const MAX_MP = 100;
 
@@ -71,7 +70,7 @@ function HeroVitalsBay({ hp, mp, xpEarned, maxXp, streakCount }: { hp: number; m
     <View style={styles.hudBay}>
       <View style={styles.hudIdentityRow}>
         <Text style={styles.hudIdentity}>
-          Lv {hero.level} {hero.title} · {HERO_NAME}
+          Lv {hero.level} {hero.title} · {HERO_IDENTITY.name}
         </Text>
         {streakCount > 0 && (
           <View style={[styles.streakBadge, isHot && styles.streakBadgeHot]}>
@@ -272,6 +271,8 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
         realmTitle={realmMeta?.title ?? 'Realm'}
         realmEmoji={realmMeta?.emoji ?? '🧙'}
         guardianName={realmMeta?.guardianName ?? 'Guardian'}
+        guardianEmoji={realmMeta?.guardianEmoji ?? '👹'}
+        guardianPurpose={realmMeta?.guardianPurpose ?? 'A guardian of this realm.'}
         stageIndex={activeStageIndex}
         totalStages={stages.length}
         lastResult={lastResult}
