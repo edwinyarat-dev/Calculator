@@ -78,6 +78,11 @@ export interface EntryDisplayProps {
 }
 
 export function EntryDisplay({ prompt, entry, feedback, prefix }: EntryDisplayProps) {
+  // Cosmetic-only "spell charge" — fills up as digits are typed, capped at a
+  // handful of digits. Purely derived from the entry string already passed
+  // in, so every existing call site gets it for free with no prop changes.
+  const chargePct = feedback === 'idle' ? Math.min(100, entry.length * 25) : entry.length > 0 ? 100 : 0;
+
   return (
     <View style={styles.entryCard}>
       <Text style={styles.promptText}>{prompt}</Text>
@@ -89,6 +94,9 @@ export function EntryDisplay({ prompt, entry, feedback, prefix }: EntryDisplayPr
         ]}
       >
         <Text style={styles.entryText}>{entry ? `${prefix ?? ''}${entry}` : '?'}</Text>
+      </View>
+      <View style={styles.chargeTrack}>
+        <View style={[styles.chargeFill, { width: `${chargePct}%` }, chargePct >= 100 && styles.chargeFillReady]} />
       </View>
     </View>
   );
@@ -128,6 +136,25 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '800',
     color: DL_COLORS.text,
+  },
+  chargeTrack: {
+    width: '100%',
+    maxWidth: 160,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: DL_COLORS.surfaceMuted,
+    overflow: 'hidden',
+  },
+  chargeFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: DL_COLORS.amethyst,
+  },
+  chargeFillReady: {
+    backgroundColor: DL_COLORS.lime,
+    shadowColor: DL_COLORS.lime,
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
   },
   keypad: {
     width: '100%',

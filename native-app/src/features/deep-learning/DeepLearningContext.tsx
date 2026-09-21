@@ -17,6 +17,8 @@ export interface DeepLearningContextValue {
   nearMissMessage: string | null;
   /** Set right after submitInput resolves, so consumers can trigger one-shot effects. */
   lastResult: 'won' | 'lost' | null;
+  /** Increments on every submitInput call, even if lastResult repeats the same value twice in a row — lets effects (e.g. a hit/miscast animation) re-fire on consecutive identical outcomes. */
+  resultToken: number;
   /** Formally evaluates an attempt against the active stage. Returns true on a win. */
   submitInput: (value: number) => boolean;
   /** Jump to an already-unlocked stage (from the LevelSelector). */
@@ -47,6 +49,7 @@ export function DeepLearningProvider({
   const [isNearMiss, setIsNearMiss] = useState(false);
   const [nearMissMessage, setNearMissMessage] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<'won' | 'lost' | null>(null);
+  const [resultToken, setResultToken] = useState(0);
 
   const activeStage = stages[activeStageIndex];
 
@@ -67,6 +70,7 @@ export function DeepLearningProvider({
         setIsNearMiss(false);
         setNearMissMessage(null);
         setLastResult('won');
+        setResultToken((t) => t + 1);
 
         const nextStage = stages[activeStageIndex + 1];
         if (nextStage) {
@@ -92,6 +96,7 @@ export function DeepLearningProvider({
         setStreakCount(0);
       }
       setLastResult('lost');
+      setResultToken((t) => t + 1);
       return false;
     },
     [activeStageIndex, stages, streakCount]
@@ -126,6 +131,7 @@ export function DeepLearningProvider({
       isNearMiss,
       nearMissMessage,
       lastResult,
+      resultToken,
       submitInput,
       goToStage,
       clearNearMiss,
@@ -140,6 +146,7 @@ export function DeepLearningProvider({
       isNearMiss,
       nearMissMessage,
       lastResult,
+      resultToken,
       submitInput,
       goToStage,
       clearNearMiss,

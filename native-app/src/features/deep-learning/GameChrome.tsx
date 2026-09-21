@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { awardXP, markRealmCleared } from '../../utils/gameState';
 import { MODULES } from '../../../theme';
+import { BattleStage } from './BattleStage';
 import { DeepLearningProvider, useDeepLearning } from './DeepLearningContext';
 import LevelSelector from './LevelSelector';
 import { DL_COLORS } from './theme';
@@ -134,7 +135,8 @@ export function RealmCompleteModal({
 }
 
 function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: string; onRestart: () => void }) {
-  const { stages, activeStageIndex, activeStage, unlockedStages, submitInput, goToStage, lastResult, xpEarned } = useDeepLearning();
+  const { stages, activeStageIndex, activeStage, unlockedStages, submitInput, goToStage, lastResult, resultToken, xpEarned } =
+    useDeepLearning();
   const [showBanner, setShowBanner] = useState(false);
   const prevXpRef = useRef(0);
 
@@ -172,6 +174,14 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
     <View style={styles.gameContainer}>
       <ProgressHeader maxXp={maxXp} />
       <LevelSelector stages={stages} activeStageIndex={activeStageIndex} unlockedStages={unlockedStages} onSelectStage={goToStage} />
+      <BattleStage
+        realmTitle={realmMeta?.title ?? 'Realm'}
+        realmEmoji={realmMeta?.emoji ?? '🧙'}
+        stageIndex={activeStageIndex}
+        totalStages={stages.length}
+        lastResult={lastResult}
+        resultToken={resultToken}
+      />
       <Text style={styles.stageTitle}>{activeStage.title}</Text>
       <NearMissBanner />
       {!showBanner && (
