@@ -37,6 +37,8 @@ export interface BattleStageProps {
   totalStages: number;
   lastResult: 'won' | 'lost' | null;
   resultToken: number;
+  /** A near-miss is deliberately encouraging, not punishing — skip the hurt shake for it. */
+  isNearMiss?: boolean;
   /** The real XP gained on the most recent win, shown as a floating reward number. */
   xpGain: number;
   heroImageSource?: ImageSourcePropType;
@@ -78,6 +80,7 @@ export function BattleStage({
   totalStages,
   lastResult,
   resultToken,
+  isNearMiss,
   xpGain,
   heroImageSource,
   enemyImageSource,
@@ -126,7 +129,7 @@ export function BattleStage({
       rewardOpacity.value = 0;
       rewardY.value = withDelay(400, withTiming(-36, { duration: 700, easing: Easing.out(Easing.quad) }));
       rewardOpacity.value = withDelay(400, withSequence(withTiming(1, { duration: 120 }), withDelay(400, withTiming(0, { duration: 200 }))));
-    } else if (lastResult === 'lost') {
+    } else if (lastResult === 'lost' && !isNearMiss) {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       }
