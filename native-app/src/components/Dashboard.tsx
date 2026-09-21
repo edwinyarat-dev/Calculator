@@ -1,59 +1,73 @@
-import React from 'react';
+import { Gem, Hourglass } from 'lucide-react-native';
+import React, { useState } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ModuleKey } from '../../theme';
 import { DL_COLORS } from '../features/deep-learning/theme';
-import { useGameState, xpProgress } from '../utils/gameState';
+import { useGameState } from '../utils/gameState';
+import { CharacterProfileCard } from './CharacterProfileCard';
+import { KineticStage } from './KineticStage';
+import { RealmViewport } from './RealmViewport';
 
-// Reuses the app's existing "Electric Amethyst & Cyber Lime" identity (see
-// src/features/deep-learning/theme.ts) rather than inventing a third
-// palette — the RPG shell and the module games should read as one world.
+// Matches the v0-designed "MathQuest / Chronomancer" HUD layout, rebuilt in
+// React Native: a top bar with a Chrono-Shards counter, then a responsive
+// grid — 1 part character profile, 3 parts world map + active game.
+// React Native has no CSS blur filter, so the ambient background glow is
+// approximated with large, softly-shadowed translucent circles rather than
+// a true Gaussian blur.
 
-const SIDEBAR_BREAKPOINT = 700;
+const SIDEBAR_BREAKPOINT = 900;
+const BG_VOID = '#0b0f19';
 
-function CharacterProfileFrame() {
-  const hero = useGameState();
-  const { current, span } = xpProgress(hero);
-  const pct = Math.min(100, (current / span) * 100);
-
+function AmbientGlow() {
   return (
-    <View style={styles.profileFrame}>
-      <View style={styles.avatarRing}>
-        <Text style={styles.avatarEmoji}>🧙</Text>
-      </View>
-      <Text style={styles.heroTitle}>{hero.title}</Text>
-      <Text style={styles.heroLevel}>Level {hero.level}</Text>
+    <View style={styles.glowLayer} pointerEvents="none">
+      <View style={[styles.glowCircle, styles.glowCircleTopLeft, { backgroundColor: DL_COLORS.amethystSoft }]} />
+      <View style={[styles.glowCircle, styles.glowCircleBottomRight, { backgroundColor: DL_COLORS.limeSoft }]} />
+    </View>
+  );
+}
 
-      <View style={styles.xpBarTrack}>
-        <View style={[styles.xpBarFill, { width: `${pct}%` }]} />
+function HudHeader() {
+  const hero = useGameState();
+  return (
+    <View style={styles.header}>
+      <View style={styles.headerLeft}>
+        <View style={styles.logoMark}>
+          <Hourglass size={20} color={DL_COLORS.amethyst} strokeWidth={2.2} />
+        </View>
+        <View>
+          <Text style={styles.wordmark}>MathQuest</Text>
+          <Text style={styles.subtitle}>Chronomancer</Text>
+        </View>
       </View>
-      <Text style={styles.xpBarLabel}>{current} / {span} XP to Level {hero.level + 1}</Text>
-
-      <View style={styles.totalXpPill}>
-        <Text style={styles.totalXpText}>{hero.totalXp} total XP</Text>
+      <View style={styles.shardsPill}>
+        <Gem size={16} color={DL_COLORS.amethyst} strokeWidth={2.2} />
+        <Text style={styles.shardsValue}>{hero.totalXp.toLocaleString()}</Text>
+        <Text style={styles.shardsLabel}>Chrono-Shards</Text>
       </View>
     </View>
   );
 }
 
-export interface DashboardProps {
-  /** The dynamic world map / active math game rendered in the large viewport. */
-  children?: React.ReactNode;
-}
-
-export default function Dashboard({ children }: DashboardProps) {
+export default function Dashboard() {
   const { width } = useWindowDimensions();
   const isWide = width >= SIDEBAR_BREAKPOINT;
+  const [activeRealm, setActiveRealm] = useState<ModuleKey>('arithmetic');
 
   return (
-    <View style={[styles.root, isWide ? styles.rootRow : styles.rootColumn]}>
-      <View style={[styles.sidebar, isWide ? styles.sidebarWide : styles.sidebarNarrow]}>
-        <CharacterProfileFrame />
-      </View>
-      <View style={styles.viewport}>
-        {children ?? (
-          <View style={styles.viewportEmpty}>
-            <Text style={styles.viewportEmptyText}>The world map goes here.</Text>
+    <View style={styles.root}>
+      <AmbientGlow />
+      <View style={styles.content}>
+        <HudHeader />
+        <View style={[styles.grid, isWide ? styles.gridRow : styles.gridColumn]}>
+          <View style={isWide ? styles.profileColWide : styles.profileColNarrow}>
+            <CharacterProfileCard />
           </View>
-        )}
+          <View style={styles.workspaceCol}>
+            <RealmViewport activeRealm={activeRealm} onSelectRealm={setActiveRealm} />
+            <KineticStage activeRealm={activeRealm} />
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -62,112 +76,125 @@ export default function Dashboard({ children }: DashboardProps) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: DL_COLORS.bgDeep,
-    gap: 14,
-    padding: 14,
+    backgroundColor: BG_VOID,
   },
-  rootRow: {
-    flexDirection: 'row',
+  glowLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
   },
-  rootColumn: {
-    flexDirection: 'column',
-  },
-  sidebar: {
-    backgroundColor: DL_COLORS.surface,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: DL_COLORS.border,
-    padding: 18,
-  },
-  sidebarWide: {
-    width: 220,
-  },
-  sidebarNarrow: {
-    width: '100%',
-  },
-  profileFrame: {
-    alignItems: 'center',
-    gap: 6,
-  },
-  avatarRing: {
-    width: 72,
-    height: 72,
+  glowCircle: {
+    position: 'absolute',
+    width: 320,
+    height: 320,
     borderRadius: 999,
-    borderWidth: 3,
-    borderColor: DL_COLORS.amethyst,
+    shadowColor: DL_COLORS.amethyst,
+    shadowOpacity: 0.5,
+    shadowRadius: 80,
+  },
+  glowCircleTopLeft: {
+    top: -140,
+    left: -140,
+  },
+  glowCircleBottomRight: {
+    bottom: -140,
+    right: -80,
+    shadowColor: DL_COLORS.lime,
+  },
+  content: {
+    flex: 1,
+    padding: 16,
+    gap: 16,
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: DL_COLORS.border,
+    paddingBottom: 16,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  logoMark: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: DL_COLORS.amethystGlow,
     backgroundColor: DL_COLORS.amethystSoft,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: DL_COLORS.amethyst,
-    shadowOpacity: 0.7,
+    shadowOpacity: 0.8,
     shadowRadius: 10,
-    marginBottom: 4,
   },
-  avatarEmoji: {
-    fontSize: 34,
-  },
-  heroTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: DL_COLORS.amethyst,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  heroLevel: {
-    fontSize: 20,
+  wordmark: {
+    fontSize: 17,
     fontWeight: '800',
     color: DL_COLORS.text,
-    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
   },
-  xpBarTrack: {
-    width: '100%',
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: DL_COLORS.surfaceMuted,
-    overflow: 'hidden',
-  },
-  xpBarFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: DL_COLORS.lime,
-    shadowColor: DL_COLORS.lime,
-    shadowOpacity: 0.7,
-    shadowRadius: 6,
-  },
-  xpBarLabel: {
-    fontSize: 11,
-    color: DL_COLORS.textMuted,
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  totalXpPill: {
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: DL_COLORS.surfaceMuted,
-  },
-  totalXpText: {
-    fontSize: 11,
+  subtitle: {
+    fontSize: 10.5,
     fontWeight: '700',
-    color: DL_COLORS.lime,
+    color: DL_COLORS.amethyst,
+    textTransform: 'uppercase',
+    letterSpacing: 3,
   },
-  viewport: {
-    flex: 1,
-    backgroundColor: DL_COLORS.surface,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: DL_COLORS.border,
-    overflow: 'hidden',
-    minHeight: 320,
-  },
-  viewportEmpty: {
-    flex: 1,
+  shardsPill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: DL_COLORS.border,
+    backgroundColor: DL_COLORS.surface,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  viewportEmptyText: {
-    fontSize: 13,
+  shardsValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: DL_COLORS.text,
+  },
+  shardsLabel: {
+    fontSize: 10.5,
+    fontWeight: '700',
     color: DL_COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  grid: {
+    flex: 1,
+    gap: 16,
+  },
+  gridRow: {
+    flexDirection: 'row',
+  },
+  gridColumn: {
+    flexDirection: 'column',
+  },
+  profileColWide: {
+    width: 260,
+  },
+  profileColNarrow: {
+    width: '100%',
+  },
+  workspaceCol: {
+    flex: 1,
+    gap: 16,
   },
 });

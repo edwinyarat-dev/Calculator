@@ -524,7 +524,7 @@ const ARITHMETIC_STAGES: MathStageConfig[] = [
 ];
 
 export default function ArithmeticGameModule() {
-  return <DeepLearningGameScreen stages={ARITHMETIC_STAGES} maxXp={220} />;
+  return <DeepLearningGameScreen stages={ARITHMETIC_STAGES} maxXp={220} realmId="arithmetic" />;
 }
 
 const styles = StyleSheet.create({

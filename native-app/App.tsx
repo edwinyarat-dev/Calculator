@@ -8,21 +8,14 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
-import ArithmeticGameModule from './components/ArithmeticGameModule';
-import CalculusLimitVisualizer from './components/CalculusLimitVisualizer';
-import CompoundInterestModule from './components/CompoundInterestModule';
-import DataStatisticsModule from './components/DataStatisticsModule';
-import GeometryModule from './components/GeometryModule';
-import ScreenHeader from './components/ScreenHeader';
-import TrigonometryGameModule from './components/TrigonometryGameModule';
-import HomeScreen from './screens/HomeScreen';
-import { MODULES, ModuleKey, theme } from './theme';
+import Dashboard from './src/components/Dashboard';
 
 // Fonts are a visual nicety, not something the app should ever hang on.
 // If loading fails (or just never resolves, e.g. a blocked/slow asset host)
 // we fall back to system fonts after a short grace period instead of
 // spinning forever.
 const FONT_TIMEOUT_MS = 4000;
+const BG_VOID = '#0b0f19';
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -34,7 +27,6 @@ export default function App() {
     Nunito_800ExtraBold,
   });
   const [timedOut, setTimedOut] = useState(false);
-  const [screen, setScreen] = useState<ModuleKey | 'home'>('home');
 
   useEffect(() => {
     const timer = setTimeout(() => setTimedOut(true), FONT_TIMEOUT_MS);
@@ -46,37 +38,17 @@ export default function App() {
   if (!ready) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator color={theme.color.coral} size="large" />
+        <ActivityIndicator color="#9D4EDD" size="large" />
       </View>
     );
   }
 
-  const activeModule = MODULES.find((m) => m.key === screen);
-
   return (
     <SafeAreaView style={styles.safeArea}>
-      {screen === 'home' ? (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <HomeScreen onSelect={setScreen} />
-        </ScrollView>
-      ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent} stickyHeaderIndices={[0]}>
-          <ScreenHeader
-            emoji={activeModule!.emoji}
-            title={activeModule!.title}
-            blurb={activeModule!.blurb}
-            accent={activeModule!.accent}
-            onBack={() => setScreen('home')}
-          />
-          {screen === 'arithmetic' && <ArithmeticGameModule />}
-          {screen === 'compoundInterest' && <CompoundInterestModule />}
-          {screen === 'geometry' && <GeometryModule />}
-          {screen === 'statistics' && <DataStatisticsModule />}
-          {screen === 'trigonometry' && <TrigonometryGameModule />}
-          {screen === 'calculus' && <CalculusLimitVisualizer />}
-        </ScrollView>
-      )}
-      <StatusBar style="dark" />
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Dashboard />
+      </ScrollView>
+      <StatusBar style="light" />
     </SafeAreaView>
   );
 }
@@ -84,7 +56,7 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.color.background,
+    backgroundColor: BG_VOID,
   },
   scrollContent: {
     flexGrow: 1,
@@ -93,6 +65,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.color.background,
+    backgroundColor: BG_VOID,
   },
 });

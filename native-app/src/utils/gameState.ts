@@ -35,6 +35,8 @@ export interface HeroState {
   totalXp: number;
   level: number;
   title: string;
+  /** Module keys (e.g. 'arithmetic') whose full 4-stage progression has been mastered. */
+  clearedRealms: string[];
 }
 
 export interface AwardXpResult {
@@ -55,9 +57,9 @@ function titleForLevel(level: number): string {
   return title;
 }
 
-function buildState(totalXp: number): HeroState {
+function buildState(totalXp: number, clearedRealms: string[] = []): HeroState {
   const level = levelForXp(totalXp);
-  return { totalXp, level, title: titleForLevel(level) };
+  return { totalXp, level, title: titleForLevel(level), clearedRealms };
 }
 
 /** How far into the current level the Hero is, and how much the level spans — for an XP bar. */
@@ -88,8 +90,8 @@ export function hydrateGameState(): Promise<HeroState> {
   hydratePromise = AsyncStorage.getItem(STORAGE_KEY)
     .then((raw) => {
       if (raw) {
-        const saved = JSON.parse(raw) as { totalXp: number };
-        state = buildState(saved.totalXp ?? 0);
+        const saved = JSON.parse(raw) as { totalXp: number; clearedRealms?: string[] };
+        state = buildState(saved.totalXp ?? 0, saved.clearedRealms ?? []);
       }
       hydrated = true;
       notify();
@@ -115,14 +117,22 @@ export function subscribeGameState(listener: (next: HeroState) => void): () => v
 /** Feeds a module's XP reward into the Hero's overall level. Returns whether it triggered a level-up. */
 export function awardXP(amount: number): AwardXpResult {
   const previousLevel = state.level;
-  state = buildState(state.totalXp + Math.max(0, Math.round(amount)));
+  state = buildState(state.totalXp + Math.max(0, Math.round(amount)), state.clearedRealms);
   persist();
   notify();
   return { didLevelUp: state.level > previousLevel, previousLevel, state };
 }
 
+/** Marks a module's realm as fully mastered (all 4 stages cleared). Idempotent. */
+export function markRealmCleared(realmId: string): void {
+  if (state.clearedRealms.includes(realmId)) return;
+  state = buildState(state.totalXp, [...state.clearedRealms, realmId]);
+  persist();
+  notify();
+}
+
 export function resetGameState(): void {
-  state = buildState(0);
+  state = buildState(0, []);
   persist();
   notify();
 }

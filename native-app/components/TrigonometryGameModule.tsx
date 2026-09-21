@@ -526,7 +526,7 @@ const TRIG_STAGES: MathStageConfig[] = [
 ];
 
 export default function TrigonometryGameModule() {
-  return <DeepLearningGameScreen stages={TRIG_STAGES} maxXp={220} />;
+  return <DeepLearningGameScreen stages={TRIG_STAGES} maxXp={220} realmId="trigonometry" />;
 }
 
 const styles = StyleSheet.create({

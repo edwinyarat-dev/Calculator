@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { awardXP, markRealmCleared } from '../../utils/gameState';
 import { DeepLearningProvider, useDeepLearning } from './DeepLearningContext';
 import LevelSelector from './LevelSelector';
 import { DL_COLORS } from './theme';
@@ -82,15 +83,28 @@ export function StageCompleteBanner({ visible, isFinalStage, onContinue }: { vis
   );
 }
 
-function GameInner({ maxXp }: { maxXp: number }) {
-  const { stages, activeStageIndex, activeStage, unlockedStages, submitInput, goToStage, lastResult } = useDeepLearning();
+function GameInner({ maxXp, realmId }: { maxXp: number; realmId?: string }) {
+  const { stages, activeStageIndex, activeStage, unlockedStages, submitInput, goToStage, lastResult, xpEarned } = useDeepLearning();
   const [showBanner, setShowBanner] = useState(false);
-
-  useEffect(() => {
-    if (lastResult === 'won') setShowBanner(true);
-  }, [lastResult, activeStageIndex]);
+  const prevXpRef = useRef(0);
 
   const isFinalStage = activeStageIndex === stages.length - 1;
+
+  useEffect(() => {
+    if (lastResult !== 'won') return;
+    setShowBanner(true);
+
+    // Mirror this module's own XP economy into the app-wide Hero character —
+    // each module keeps running its local engine unchanged; this just feeds
+    // the delta since last win into the global level/title system.
+    const delta = xpEarned - prevXpRef.current;
+    if (delta > 0) {
+      awardXP(delta);
+      prevXpRef.current = xpEarned;
+    }
+    if (isFinalStage && realmId) markRealmCleared(realmId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastResult, activeStageIndex]);
 
   function handleContinue() {
     setShowBanner(false);
@@ -123,11 +137,20 @@ function GameInner({ maxXp }: { maxXp: number }) {
 }
 
 /** Drop-in 4-stage game screen: hand it a module's stage configs and it wires up the whole shell. */
-export function DeepLearningGameScreen({ stages, maxXp }: { stages: MathStageConfig[]; maxXp: number }) {
+export function DeepLearningGameScreen({
+  stages,
+  maxXp,
+  realmId,
+}: {
+  stages: MathStageConfig[];
+  maxXp: number;
+  /** Module key (e.g. 'arithmetic') used to mark this realm cleared in the global Hero state on mastery. */
+  realmId?: string;
+}) {
   return (
     <DeepLearningProvider stages={stages}>
       <View style={styles.root}>
-        <GameInner maxXp={maxXp} />
+        <GameInner maxXp={maxXp} realmId={realmId} />
       </View>
     </DeepLearningProvider>
   );
