@@ -30,16 +30,26 @@ function makeChartScales(xMin: number, xMax: number, yMin: number, yMax: number)
   };
 }
 
+function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function clampScore(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
 // ---------------------------------------------------------------------------
 // Stage 1 — Foundations: "Catch the Instant" — squeeze h toward 0, by feel
 // ---------------------------------------------------------------------------
 
-const STAGE1_ROUNDS = [
-  { tPoint: 1, threshold: 0.3 },
-  { tPoint: 1, threshold: 0.1 },
-  { tPoint: 1, threshold: 0.02 },
-];
+const STAGE1_THRESHOLDS = [0.3, 0.1, 0.02];
 const STAGE1_HOLD_MS = 1200;
+
+// The thresholds stay fixed (they deliberately teach progressively tighter
+// precision), but the point on the curve varies each playthrough.
+function generateStage1Rounds(): { tPoint: number; threshold: number }[] {
+  return STAGE1_THRESHOLDS.map((threshold) => ({ tPoint: randomInt(5, 20) / 10, threshold }));
+}
 const CURVE_X_MIN = -0.5;
 const CURVE_X_MAX = 3;
 const CURVE_Y_MIN = -0.5;
@@ -54,6 +64,7 @@ const curvePath = Array.from({ length: CURVE_SAMPLES + 1 }, (_, i) => {
   .join(' ');
 
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
+  const [rounds] = useState(generateStage1Rounds);
   const [round, setRound] = useState(0);
   const [h, setH] = useState(1);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -62,8 +73,8 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
 
-  const isFinalRound = round === STAGE1_ROUNDS.length - 1;
-  const goal = STAGE1_ROUNDS[round];
+  const isFinalRound = round === rounds.length - 1;
+  const goal = rounds[round];
   const withinTolerance = h <= goal.threshold;
 
   useEffect(() => {
@@ -92,7 +103,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
           setRound((r) => r + 1);
         } else {
           finalRoundWonRef.current = true;
-          onCommit(h);
+          onCommit(1);
         }
         return;
       }
@@ -106,7 +117,12 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   }, [withinTolerance, isActive, round]);
 
   function handleRelease() {
-    if (isFinalRound && !finalRoundWonRef.current) onCommit(h);
+    if (isFinalRound && !finalRoundWonRef.current) {
+      // h can only overshoot the threshold from above (it's a one-sided
+      // "get below this" target), so score it as how much smaller it would
+      // still need to get, relative to the threshold itself.
+      onCommit(clampScore(1 - (h - goal.threshold) / goal.threshold));
+    }
   }
 
   const xA = goal.tPoint;
@@ -117,7 +133,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   return (
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>
-        Round {round + 1} of {STAGE1_ROUNDS.length} · squeeze the interval below h = {goal.threshold}
+        Round {round + 1} of {rounds.length} · squeeze the interval below h = {goal.threshold}
       </Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Svg width="100%" height={CHART_H} viewBox={`0 0 ${CHART_W} ${CHART_H}`} role="img" accessibilityLabel="Falling object height curve">
@@ -165,21 +181,39 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 // Stage 2 — Quantitative Mechanics: real average-speed calculations
 // ---------------------------------------------------------------------------
 
-const STAGE2_PROBLEMS = [
-  { t: 1, h: 1, prompt: 'A dropped object has height h(t) = t² meters. Between t = 1s and t = 2s, what is the AVERAGE speed (m/s)?' },
-  { t: 2, h: 1, prompt: 'Same object. Between t = 2s and t = 3s, what is the AVERAGE speed (m/s)?' },
-  { t: 3, h: 2, prompt: 'Same object. Between t = 3s and t = 5s, what is the AVERAGE speed (m/s)?' },
-];
+// avgVelocity(t, h) for f(x) = x² works out to exactly 2t + h, so keeping
+// both integers guarantees a clean whole-number answer every time.
+function generateStage2Problems(): { t: number; h: number; prompt: string }[] {
+  const pairs: { t: number; h: number }[] = [];
+  const used = new Set<string>();
+  while (pairs.length < 3) {
+    const t = randomInt(1, 6);
+    const h = randomInt(1, 3);
+    const key = `${t}-${h}`;
+    if (used.has(key)) continue;
+    used.add(key);
+    pairs.push({ t, h });
+  }
+  return pairs.map(({ t, h }, i) => ({
+    t,
+    h,
+    prompt:
+      i === 0
+        ? `A dropped object has height h(t) = t² meters. Between t = ${t}s and t = ${t + h}s, what is the AVERAGE speed (m/s)?`
+        : `Same object. Between t = ${t}s and t = ${t + h}s, what is the AVERAGE speed (m/s)?`,
+  }));
+}
 
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
+  const [problems] = useState(generateStage2Problems);
   const [round, setRound] = useState(0);
   const [entry, setEntry] = useState('');
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
 
-  const isFinalRound = round === STAGE2_PROBLEMS.length - 1;
-  const problem = STAGE2_PROBLEMS[round];
+  const isFinalRound = round === problems.length - 1;
+  const problem = problems[round];
   const answer = Math.round(avgVelocity(problem.t, problem.h));
 
   useEffect(() => {
@@ -205,13 +239,13 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
       effects.trigger();
       if (isFinalRound) {
         finalRoundWonRef.current = true;
-        onCommit(value);
+        onCommit(1);
       } else {
         setRound((r) => r + 1);
       }
     } else {
       setFeedback('wrong');
-      if (isFinalRound) onCommit(value);
+      if (isFinalRound) onCommit(clampScore(1 - Math.abs(value - answer) / Math.max(1, Math.abs(answer))));
       setTimeout(() => {
         setEntry('');
         setFeedback('idle');
@@ -221,7 +255,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Round {round + 1} of {STAGE2_PROBLEMS.length} · average speed = distance ÷ time</Text>
+      <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · average speed = distance ÷ time</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <EntryDisplay prompt={problem.prompt} entry={entry} feedback={feedback} />
         {effects.isBursting && (
@@ -240,7 +274,6 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 // Stage 3 — Variables Challenge: "Speedometer Glitch" — catch the tight window
 // ---------------------------------------------------------------------------
 
-const STAGE3_T_POINT = 3;
 const STAGE3_H_START = 1.0;
 const STAGE3_H_END = 0.02;
 const STAGE3_CYCLE_MS = 3000;
@@ -249,6 +282,7 @@ const STAGE3_GOOD_THRESHOLD = 0.1;
 const STAGE3_HOLD_MS = 3000;
 
 function Stage3SpeedometerGlitch({ onCommit, isActive }: StageCanvasProps) {
+  const [tPoint] = useState(() => randomInt(2, 5));
   const [cycleStart, setCycleStart] = useState(() => Date.now());
   const [h, setH] = useState(STAGE3_H_START);
   const [locking, setLocking] = useState(false);
@@ -276,8 +310,8 @@ function Stage3SpeedometerGlitch({ onCommit, isActive }: StageCanvasProps) {
 
   const goodWindow = h <= STAGE3_GOOD_THRESHOLD;
   const engaged = locking && goodWindow;
-  const liveVelocity = avgVelocity(STAGE3_T_POINT, h);
-  const trueVelocity = 2 * STAGE3_T_POINT;
+  const liveVelocity = avgVelocity(tPoint, h);
+  const trueVelocity = 2 * tPoint;
 
   useEffect(() => {
     if (!engaged) {
@@ -342,9 +376,8 @@ function Stage3SpeedometerGlitch({ onCommit, isActive }: StageCanvasProps) {
 // Stage 4 — Mastery Sandbox: "Ramp Designer Boss" — match a target slope
 // ---------------------------------------------------------------------------
 
-const STAGE4_TARGET_X = 2;
-const STAGE4_TARGET_SLOPE = 6;
 const STAGE4_MATCH_THRESHOLD = 95;
+const STAGE4_START = { a: 1, b: 0, c: 0 };
 const RAMP_X_MIN = -1;
 const RAMP_X_MAX = 4;
 const RAMP_Y_MIN = -4;
@@ -358,21 +391,37 @@ function quad(a: number, b: number, c: number, x: number): number {
 function quadSlope(a: number, b: number, x: number): number {
   return 2 * a * x + b;
 }
-function computeMatchPercent(a: number, b: number): number {
-  const slope = quadSlope(a, b, STAGE4_TARGET_X);
-  const errorPercent = (Math.abs(slope - STAGE4_TARGET_SLOPE) / Math.abs(STAGE4_TARGET_SLOPE)) * 100;
+function computeMatchPercent(a: number, b: number, targetX: number, targetSlope: number): number {
+  const slope = quadSlope(a, b, targetX);
+  const errorPercent = (Math.abs(slope - targetSlope) / Math.abs(targetSlope)) * 100;
   return Math.max(0, 100 - errorPercent);
 }
 
+// Randomized each playthrough, re-rolled if it would already be within
+// reach of the sliders' fixed starting position.
+function generateStage4Target(): { targetX: number; targetSlope: number } {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const targetX = randomInt(1, 3);
+    // Kept within [-2, 11] regardless of targetX — the tightest achievable
+    // window across x in [1,3] given the sliders' own ranges (a in [0.5,3],
+    // b in [-5,5], slope = 2ax+b) is [x-5, 6x+5], whose intersection over
+    // x in {1,2,3} is [-2, 11] (binding at x=3 on the low end, x=1 on the high).
+    const targetSlope = randomInt(-2, 11) || 4;
+    if (computeMatchPercent(STAGE4_START.a, STAGE4_START.b, targetX, targetSlope) < 80) return { targetX, targetSlope };
+  }
+  return { targetX: 2, targetSlope: 6 };
+}
+
 function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
-  const [a, setA] = useState(1);
-  const [b, setB] = useState(0);
-  const [c, setC] = useState(0);
+  const [{ targetX, targetSlope }] = useState(generateStage4Target);
+  const [a, setA] = useState(STAGE4_START.a);
+  const [b, setB] = useState(STAGE4_START.b);
+  const [c, setC] = useState(STAGE4_START.c);
   const effects = useSuccessEffects();
   const wonRef = useRef(false);
 
-  const slope = quadSlope(a, b, STAGE4_TARGET_X);
-  const matchPercent = computeMatchPercent(a, b);
+  const slope = quadSlope(a, b, targetX);
+  const matchPercent = computeMatchPercent(a, b, targetX, targetSlope);
 
   useEffect(() => {
     if (!isActive || wonRef.current) return;
@@ -391,26 +440,26 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
     .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`)
     .join(' ');
 
-  const yAtTarget = quad(a, b, c, STAGE4_TARGET_X);
-  const tangentX1 = STAGE4_TARGET_X - 0.8;
-  const tangentX2 = STAGE4_TARGET_X + 0.8;
-  const tangentY1 = yAtTarget + slope * (tangentX1 - STAGE4_TARGET_X);
-  const tangentY2 = yAtTarget + slope * (tangentX2 - STAGE4_TARGET_X);
+  const yAtTarget = quad(a, b, c, targetX);
+  const tangentX1 = targetX - 0.8;
+  const tangentX2 = targetX + 0.8;
+  const tangentY1 = yAtTarget + slope * (tangentX1 - targetX);
+  const tangentY2 = yAtTarget + slope * (tangentX2 - targetX);
 
   return (
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>
-        Boss level: design a ramp y = ax² + bx + c whose steepness at x = {STAGE4_TARGET_X} matches a target speed-gain of {STAGE4_TARGET_SLOPE}.
+        Boss level: design a ramp y = ax² + bx + c whose steepness at x = {targetX} matches a target speed-gain of {targetSlope}.
       </Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Svg width="100%" height={CHART_H} viewBox={`0 0 ${CHART_W} ${CHART_H}`} role="img" accessibilityLabel="Ramp curve with tangent line">
           <Line x1={PAD} y1={rampSy(0)} x2={CHART_W - PAD} y2={rampSy(0)} stroke={DL_COLORS.border} strokeWidth={1.5} />
           <Path d={curvePathD} fill="none" stroke={matchPercent >= STAGE4_MATCH_THRESHOLD ? DL_COLORS.lime : DL_COLORS.amethyst} strokeWidth={3} strokeLinecap="round" />
           <Line x1={rampSx(tangentX1)} y1={rampSy(tangentY1)} x2={rampSx(tangentX2)} y2={rampSy(tangentY2)} stroke={DL_COLORS.text} strokeWidth={2} strokeDasharray="5,4" />
-          <Circle cx={rampSx(STAGE4_TARGET_X)} cy={rampSy(yAtTarget)} r={6} fill={DL_COLORS.text} />
+          <Circle cx={rampSx(targetX)} cy={rampSy(yAtTarget)} r={6} fill={DL_COLORS.text} />
           {effects.isBursting && <ParticleBurst progress={effects.burstProgress} />}
         </Svg>
-        <Text style={styles.reportLabel}>Slope at x = {STAGE4_TARGET_X}: {slope.toFixed(2)} (target: {STAGE4_TARGET_SLOPE})</Text>
+        <Text style={styles.reportLabel}>Slope at x = {targetX}: {slope.toFixed(2)} (target: {targetSlope})</Text>
       </ReAnimated.View>
 
       <View style={styles.matchRow}>
@@ -437,53 +486,65 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
 // Stage config + top-level module
 // ---------------------------------------------------------------------------
 
-const LIMIT_CHASER_STAGES: MathStageConfig[] = [
-  {
-    id: 'foundations',
-    title: 'Foundations',
-    objective: 'Squeeze the measuring window toward zero, by feel.',
-    targetValue: STAGE1_ROUNDS[STAGE1_ROUNDS.length - 1].threshold,
-    baseXp: 20,
-    toleranceThreshold: 0,
-    nearMiss: { thresholdPercent: 60, message: 'Getting tighter — squeeze the window a little more.' },
-    checkWinCondition: (value, target) => value <= target,
-    renderCanvas: Stage1Foundations,
-  },
-  {
-    id: 'quantitative',
-    title: 'Quantitative Mechanics',
-    objective: 'Calculate real average speeds over a time interval.',
-    targetValue: Math.round(avgVelocity(STAGE2_PROBLEMS[STAGE2_PROBLEMS.length - 1].t, STAGE2_PROBLEMS[STAGE2_PROBLEMS.length - 1].h)),
-    baseXp: 40,
-    toleranceThreshold: 0,
-    nearMiss: { thresholdPercent: 15, message: 'Close — double-check your subtraction before dividing by the time elapsed.' },
-    checkWinCondition: (value, target) => value === target,
-    renderCanvas: Stage2QuantitativeMechanics,
-  },
-  {
-    id: 'variables',
-    title: 'Speedometer Glitch',
-    objective: 'Catch the instant when the measuring window is trustworthy.',
-    targetValue: 1,
-    baseXp: 60,
-    toleranceThreshold: 0.001,
-    checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
-    renderCanvas: Stage3SpeedometerGlitch,
-  },
-  {
-    id: 'mastery',
-    title: 'Mastery Sandbox',
-    objective: 'Design a curve whose slope at a point matches a target.',
-    targetValue: STAGE4_MATCH_THRESHOLD,
-    baseXp: 100,
-    toleranceThreshold: 0,
-    checkWinCondition: (value, target) => value >= target,
-    renderCanvas: Stage4MasterySandbox,
-  },
-];
+function buildLimitChaserStages(): MathStageConfig[] {
+  return [
+    {
+      id: 'foundations',
+      title: 'Foundations',
+      objective: 'Squeeze the measuring window toward zero, by feel.',
+      targetValue: 1,
+      baseXp: 20,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 60, message: 'Getting tighter — squeeze the window a little more.' },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage1Foundations,
+    },
+    {
+      id: 'quantitative',
+      title: 'Quantitative Mechanics',
+      objective: 'Calculate real average speeds over a time interval.',
+      targetValue: 1,
+      baseXp: 40,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 15, message: 'Close — double-check your subtraction before dividing by the time elapsed.' },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage2QuantitativeMechanics,
+    },
+    {
+      id: 'variables',
+      title: 'Speedometer Glitch',
+      objective: 'Catch the instant when the measuring window is trustworthy.',
+      targetValue: 1,
+      baseXp: 60,
+      toleranceThreshold: 0.001,
+      checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
+      renderCanvas: Stage3SpeedometerGlitch,
+    },
+    {
+      id: 'mastery',
+      title: 'Mastery Sandbox',
+      objective: 'Design a curve whose slope at a point matches a target.',
+      targetValue: STAGE4_MATCH_THRESHOLD,
+      baseXp: 100,
+      toleranceThreshold: 0,
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage4MasterySandbox,
+    },
+  ];
+}
 
 export default function LimitChaserGameModule() {
-  return <DeepLearningGameScreen stages={LIMIT_CHASER_STAGES} maxXp={220} realmId="calculus" />;
+  const [playthrough, setPlaythrough] = useState(0);
+  const stages = React.useMemo(buildLimitChaserStages, [playthrough]);
+  return (
+    <DeepLearningGameScreen
+      key={playthrough}
+      stages={stages}
+      maxXp={220}
+      realmId="calculus"
+      onRestart={() => setPlaythrough((p) => p + 1)}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

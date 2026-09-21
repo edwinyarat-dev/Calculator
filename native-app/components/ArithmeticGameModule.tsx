@@ -17,26 +17,46 @@ function compute(a: number, b: number, op: OpSymbol): number {
   }
 }
 
+function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/**
+ * How close a wrong final-round answer was, as a 0–1 score (1 = exact).
+ * Every stage in this module reports this normalized score to the engine
+ * instead of the raw typed value — the engine's win/near-miss check is then
+ * a fixed "score >= 1" regardless of what the randomly-generated correct
+ * answer happens to be each playthrough, so regenerating fresh problems on
+ * restart can never desync from the win condition.
+ */
+function scoreAgainst(typed: number, answer: number): number {
+  return Math.max(0, 1 - Math.abs(typed - answer) / Math.max(1, Math.abs(answer)));
+}
+
 // ---------------------------------------------------------------------------
 // Stage 1 — Foundations: single-step sums, answered by typed digit
 // ---------------------------------------------------------------------------
 
-const STAGE1_PROBLEMS: { a: number; b: number; op: OpSymbol }[] = [
-  { a: 4, b: 3, op: '+' },
-  { a: 9, b: 6, op: '+' },
-  { a: 15, b: 7, op: '−' },
-];
-const STAGE1_NEAR_MISS_PERCENT = 15;
+function generateStage1Problems(): { a: number; b: number; op: OpSymbol }[] {
+  return Array.from({ length: 3 }, () => {
+    if (Math.random() < 0.5) {
+      return { a: randomInt(1, 9), b: randomInt(1, 9), op: '+' as const };
+    }
+    const a = randomInt(10, 18);
+    return { a, b: randomInt(1, a - 1), op: '−' as const };
+  });
+}
 
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
+  const [problems] = useState(generateStage1Problems);
   const [round, setRound] = useState(0);
   const [entry, setEntry] = useState('');
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
 
-  const isFinalRound = round === STAGE1_PROBLEMS.length - 1;
-  const problem = STAGE1_PROBLEMS[round];
+  const isFinalRound = round === problems.length - 1;
+  const problem = problems[round];
   const answer = compute(problem.a, problem.b, problem.op);
 
   useEffect(() => {
@@ -62,13 +82,13 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
       effects.trigger();
       if (isFinalRound) {
         finalRoundWonRef.current = true;
-        onCommit(value);
+        onCommit(1);
       } else {
         setRound((r) => r + 1);
       }
     } else {
       setFeedback('wrong');
-      if (isFinalRound) onCommit(value);
+      if (isFinalRound) onCommit(scoreAgainst(value, answer));
       setTimeout(() => {
         setEntry('');
         setFeedback('idle');
@@ -78,7 +98,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Round {round + 1} of {STAGE1_PROBLEMS.length}</Text>
+      <Text style={styles.stageObjective}>Round {round + 1} of {problems.length}</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <EntryDisplay prompt={`${problem.a} ${problem.op} ${problem.b} = ?`} entry={entry} feedback={feedback} />
         {effects.isBursting && (
@@ -97,22 +117,28 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 // Stage 2 — Quantitative Mechanics: two-digit combos across all operators
 // ---------------------------------------------------------------------------
 
-const STAGE2_PROBLEMS: { a: number; b: number; op: OpSymbol }[] = [
-  { a: 34, b: 19, op: '+' },
-  { a: 61, b: 27, op: '−' },
-  { a: 8, b: 7, op: '×' },
-];
-const STAGE2_NEAR_MISS_PERCENT = 10;
+function generateStage2Problems(): { a: number; b: number; op: OpSymbol }[] {
+  return Array.from({ length: 3 }, () => {
+    const r = Math.random();
+    if (r < 0.4) return { a: randomInt(20, 70), b: randomInt(10, 40), op: '+' as const };
+    if (r < 0.8) {
+      const a = randomInt(30, 90);
+      return { a, b: randomInt(10, a - 5), op: '−' as const };
+    }
+    return { a: randomInt(3, 9), b: randomInt(3, 9), op: '×' as const };
+  });
+}
 
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
+  const [problems] = useState(generateStage2Problems);
   const [round, setRound] = useState(0);
   const [entry, setEntry] = useState('');
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
 
-  const isFinalRound = round === STAGE2_PROBLEMS.length - 1;
-  const problem = STAGE2_PROBLEMS[round];
+  const isFinalRound = round === problems.length - 1;
+  const problem = problems[round];
   const answer = compute(problem.a, problem.b, problem.op);
 
   useEffect(() => {
@@ -138,13 +164,13 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
       effects.trigger();
       if (isFinalRound) {
         finalRoundWonRef.current = true;
-        onCommit(value);
+        onCommit(1);
       } else {
         setRound((r) => r + 1);
       }
     } else {
       setFeedback('wrong');
-      if (isFinalRound) onCommit(value);
+      if (isFinalRound) onCommit(scoreAgainst(value, answer));
       setTimeout(() => {
         setEntry('');
         setFeedback('idle');
@@ -154,7 +180,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Round {round + 1} of {STAGE2_PROBLEMS.length} · bigger numbers, every operator</Text>
+      <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · bigger numbers, every operator</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <EntryDisplay prompt={`${problem.a} ${problem.op} ${problem.b} = ?`} entry={entry} feedback={feedback} />
         {effects.isBursting && (
@@ -386,61 +412,65 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
 // Stage config + top-level module
 // ---------------------------------------------------------------------------
 
-const ARITHMETIC_STAGES: MathStageConfig[] = [
-  {
-    id: 'foundations',
-    title: 'Foundations',
-    objective: 'Solve simple one-step sums to build speed.',
-    targetValue: compute(
-      STAGE1_PROBLEMS[STAGE1_PROBLEMS.length - 1].a,
-      STAGE1_PROBLEMS[STAGE1_PROBLEMS.length - 1].b,
-      STAGE1_PROBLEMS[STAGE1_PROBLEMS.length - 1].op
-    ),
-    baseXp: 20,
-    toleranceThreshold: 0,
-    nearMiss: { thresholdPercent: STAGE1_NEAR_MISS_PERCENT, message: 'So close — double-check that last digit!' },
-    checkWinCondition: (value, target) => value === target,
-    renderCanvas: Stage1Foundations,
-  },
-  {
-    id: 'quantitative',
-    title: 'Quantitative Mechanics',
-    objective: 'Two-digit numbers across every operator.',
-    targetValue: compute(
-      STAGE2_PROBLEMS[STAGE2_PROBLEMS.length - 1].a,
-      STAGE2_PROBLEMS[STAGE2_PROBLEMS.length - 1].b,
-      STAGE2_PROBLEMS[STAGE2_PROBLEMS.length - 1].op
-    ),
-    baseXp: 40,
-    toleranceThreshold: 0,
-    nearMiss: { thresholdPercent: STAGE2_NEAR_MISS_PERCENT, message: 'Right idea, just a small slip — try that one again.' },
-    checkWinCondition: (value, target) => value === target,
-    renderCanvas: Stage2QuantitativeMechanics,
-  },
-  {
-    id: 'variables',
-    title: 'The Variables Challenge',
-    objective: 'Answer fast, five in a row, before the clock runs out.',
-    targetValue: 1,
-    baseXp: 60,
-    toleranceThreshold: 0.001,
-    checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
-    renderCanvas: Stage3VariablesChallenge,
-  },
-  {
-    id: 'mastery',
-    title: 'Mastery Sandbox',
-    objective: 'Order-of-operations boss — sustain 95% accuracy.',
-    targetValue: STAGE4_TARGET_PERCENT,
-    baseXp: 100,
-    toleranceThreshold: 0,
-    checkWinCondition: (value, target) => value >= target,
-    renderCanvas: Stage4MasterySandbox,
-  },
-];
+function buildArithmeticStages(): MathStageConfig[] {
+  return [
+    {
+      id: 'foundations',
+      title: 'Foundations',
+      objective: 'Solve simple one-step sums to build speed.',
+      targetValue: 1,
+      baseXp: 20,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 15, message: 'So close — double-check that last digit!' },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage1Foundations,
+    },
+    {
+      id: 'quantitative',
+      title: 'Quantitative Mechanics',
+      objective: 'Two-digit numbers across every operator.',
+      targetValue: 1,
+      baseXp: 40,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 10, message: 'Right idea, just a small slip — try that one again.' },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage2QuantitativeMechanics,
+    },
+    {
+      id: 'variables',
+      title: 'The Variables Challenge',
+      objective: 'Answer fast, five in a row, before the clock runs out.',
+      targetValue: 1,
+      baseXp: 60,
+      toleranceThreshold: 0.001,
+      checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
+      renderCanvas: Stage3VariablesChallenge,
+    },
+    {
+      id: 'mastery',
+      title: 'Mastery Sandbox',
+      objective: 'Order-of-operations boss — sustain 95% accuracy.',
+      targetValue: STAGE4_TARGET_PERCENT,
+      baseXp: 100,
+      toleranceThreshold: 0,
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage4MasterySandbox,
+    },
+  ];
+}
 
 export default function ArithmeticGameModule() {
-  return <DeepLearningGameScreen stages={ARITHMETIC_STAGES} maxXp={220} realmId="arithmetic" />;
+  const [playthrough, setPlaythrough] = useState(0);
+  const stages = React.useMemo(buildArithmeticStages, [playthrough]);
+  return (
+    <DeepLearningGameScreen
+      key={playthrough}
+      stages={stages}
+      maxXp={220}
+      realmId="arithmetic"
+      onRestart={() => setPlaythrough((p) => p + 1)}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

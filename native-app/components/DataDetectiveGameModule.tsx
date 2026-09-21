@@ -14,27 +14,54 @@ function mean(values: number[]): number {
   return values.reduce((s, v) => s + v, 0) / values.length;
 }
 
+function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function clampScore(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
+function shuffle<T>(items: T[]): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 // ---------------------------------------------------------------------------
 // Stage 1 — Foundations: "Spot the Middle Suspect" — tap the median, by eye
 // ---------------------------------------------------------------------------
 
-const STAGE1_CASES = [
-  { values: [34, 28, 41, 25, 37] },
-  { values: [12, 19, 7, 15, 10] },
-  { values: [60, 45, 72, 50, 68] },
-];
 const NUMBER_LINE_W = 260;
 const NUMBER_LINE_Y = 90;
 const PAD = 24;
 
+// Evenly spaced (with a little jitter) rather than pure-uniform-random —
+// picking 5 fully independent random values risked one outlier compressing
+// the rest so close together on the number line that their tap targets
+// visually overlapped and became hard to tell apart (or to tap precisely).
+function randomStage1Case(): { values: number[] } {
+  const base = randomInt(5, 20);
+  const step = 15;
+  const values = Array.from({ length: 5 }, (_, i) => base + i * step + randomInt(-2, 2));
+  return { values: shuffle(values) };
+}
+function generateStage1Cases(): { values: number[] }[] {
+  return Array.from({ length: 3 }, randomStage1Case);
+}
+
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
+  const [cases] = useState(generateStage1Cases);
   const [round, setRound] = useState(0);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
 
-  const isFinalRound = round === STAGE1_CASES.length - 1;
-  const caseData = STAGE1_CASES[round];
+  const isFinalRound = round === cases.length - 1;
+  const caseData = cases[round];
   const stats = computeStats(caseData.values)!;
   const trueMedian = stats.median;
 
@@ -54,20 +81,28 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
       effects.trigger();
       if (isFinalRound) {
         finalRoundWonRef.current = true;
-        onCommit(value);
+        onCommit(1);
       } else {
         setTimeout(() => setRound((r) => r + 1), 500);
       }
     } else {
       setFeedback('wrong');
-      if (isFinalRound) onCommit(value);
+      if (isFinalRound) {
+        // How far off the tapped value's sorted rank was from the true
+        // middle rank — a rough but desync-proof closeness score, since it
+        // only depends on rank, not the (randomized) values themselves.
+        const sorted = [...caseData.values].sort((a, b) => a - b);
+        const middleIndex = (sorted.length - 1) / 2;
+        const tappedIndex = sorted.indexOf(value);
+        onCommit(clampScore(1 - Math.abs(tappedIndex - middleIndex) / middleIndex));
+      }
       setTimeout(() => setFeedback('idle'), 500);
     }
   }
 
   return (
     <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Round {round + 1} of {STAGE1_CASES.length}</Text>
+      <Text style={styles.stageObjective}>Round {round + 1} of {cases.length}</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Text style={styles.casePrompt}>
           Case #{round + 1}: witnesses reported these values — {caseData.values.join(', ')}. Tap the MIDDLE one (the median).
@@ -106,22 +141,70 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 // Stage 2 — Quantitative Mechanics: real case files needing mean/median/mode
 // ---------------------------------------------------------------------------
 
-const STAGE2_CASES = [
-  { prompt: 'Case file: six shell casings were measured at 10, 20, 30, 15, 25, 20 mm. What is the MEAN measurement?', values: [10, 20, 30, 15, 25, 20], answer: (v: number[]) => Math.round(mean(v)) },
-  { prompt: 'Case file: a getaway car was clocked over six blocks at 3, 7, 9, 11, 13, 17 seconds per block. What is the MEDIAN time?', values: [3, 7, 9, 11, 13, 17], answer: (v: number[]) => computeStats(v)!.median },
-  { prompt: 'Case file: six witnesses reported the suspect wearing shoe size 5, 7, 5, 9, 5, 3. What is the MODE (most common size)?', values: [5, 7, 5, 9, 5, 3], answer: (v: number[]) => computeStats(v)!.modes[0] },
-];
+interface CaseFile {
+  prompt: string;
+  answer: number;
+}
+
+// Retries until six random measurements happen to average to a whole
+// number, keeping the typed-answer format clean.
+function randomMeanCase(): CaseFile {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const values = Array.from({ length: 6 }, () => randomInt(5, 40));
+    const total = values.reduce((s, v) => s + v, 0);
+    if (total % 6 === 0) {
+      return { prompt: `Case file: six shell casings were measured at ${values.join(', ')} mm. What is the MEAN measurement?`, answer: total / 6 };
+    }
+  }
+  return { prompt: 'Case file: six shell casings were measured at 10, 20, 30, 15, 25, 20 mm. What is the MEAN measurement?', answer: 20 };
+}
+
+// Retries until the two middle (sorted) values of six random numbers sum to
+// an even number, so their median lands on a whole number.
+function randomMedianCase(): CaseFile {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const values = Array.from({ length: 6 }, () => randomInt(2, 25));
+    const stats = computeStats(values);
+    if (stats && Number.isInteger(stats.median)) {
+      return { prompt: `Case file: a getaway car was clocked over six blocks at ${values.join(', ')} seconds per block. What is the MEDIAN time?`, answer: stats.median };
+    }
+  }
+  return { prompt: 'Case file: a getaway car was clocked over six blocks at 3, 7, 9, 11, 13, 17 seconds per block. What is the MEDIAN time?', answer: 10 };
+}
+
+// Retries until one value appears more often than any other, so the mode is unambiguous.
+function randomModeCase(): CaseFile {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const modeValue = randomInt(3, 10);
+    const values = shuffle([modeValue, modeValue, modeValue, randomInt(3, 10), randomInt(3, 10), randomInt(3, 10)]);
+    const stats = computeStats(values);
+    if (stats && stats.modes.length === 1 && stats.modes[0] === modeValue) {
+      return { prompt: `Case file: six witnesses reported the suspect wearing shoe size ${values.join(', ')}. What is the MODE (most common size)?`, answer: modeValue };
+    }
+  }
+  return { prompt: 'Case file: six witnesses reported the suspect wearing shoe size 5, 7, 5, 9, 5, 3. What is the MODE (most common size)?', answer: 5 };
+}
+
+function generateStage2Cases(): CaseFile[] {
+  return [randomMeanCase(), randomMedianCase(), randomModeCase()];
+}
+
+/** How close a wrong final-round answer was, as a 0–1 score — reported instead of the raw typed value so randomized problems can't desync the fixed win check. */
+function scoreAgainst(typed: number, answer: number): number {
+  return clampScore(1 - Math.abs(typed - answer) / Math.max(1, Math.abs(answer)));
+}
 
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
+  const [cases] = useState(generateStage2Cases);
   const [round, setRound] = useState(0);
   const [entry, setEntry] = useState('');
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
 
-  const isFinalRound = round === STAGE2_CASES.length - 1;
-  const problem = STAGE2_CASES[round];
-  const answer = problem.answer(problem.values);
+  const isFinalRound = round === cases.length - 1;
+  const problem = cases[round];
+  const answer = problem.answer;
 
   useEffect(() => {
     finalRoundWonRef.current = false;
@@ -146,13 +229,13 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
       effects.trigger();
       if (isFinalRound) {
         finalRoundWonRef.current = true;
-        onCommit(value);
+        onCommit(1);
       } else {
         setRound((r) => r + 1);
       }
     } else {
       setFeedback('wrong');
-      if (isFinalRound) onCommit(value);
+      if (isFinalRound) onCommit(scoreAgainst(value, answer));
       setTimeout(() => {
         setEntry('');
         setFeedback('idle');
@@ -162,7 +245,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Round {round + 1} of {STAGE2_CASES.length} · case files</Text>
+      <Text style={styles.stageObjective}>Round {round + 1} of {cases.length} · case files</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <EntryDisplay prompt={problem.prompt} entry={entry} feedback={feedback} />
         {effects.isBursting && (
@@ -181,21 +264,45 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 // ---------------------------------------------------------------------------
 
 const STAGE3_TICK_MS = 900;
-const STAGE3_ROUNDS = [
-  { stream: [30, 45, 60, 70, 55, 40, 65], target: 50, story: 'speeding' },
-  { stream: [50, 60, 40, 70, 65, 45, 80], target: 55, story: 'reckless driving' },
-  { stream: [60, 70, 55, 80, 75, 50, 90], target: 65, story: 'a felony charge' },
-];
+const STAGE3_STORIES = ['speeding', 'reckless driving', 'a felony charge'];
+
+interface Stage3Round {
+  stream: number[];
+  target: number;
+  story: string;
+}
+
+// Each round's target is set directly from the stream's own actual peak
+// running average (not just its final value, since a running average isn't
+// monotonic) — so however the random reports come out, hitting the target
+// is always genuinely reachable, and harder rounds ask for a target closer
+// to that ceiling.
+function generateStage3Rounds(): Stage3Round[] {
+  const stories = shuffle(STAGE3_STORIES);
+  const fractions = [0.8, 0.9, 0.97];
+  return stories.map((story, i) => {
+    const stream = Array.from({ length: 7 }, () => randomInt(25, 90));
+    let runningSum = 0;
+    const runningMeans = stream.map((v, idx) => {
+      runningSum += v;
+      return runningSum / (idx + 1);
+    });
+    const peakRunningMean = Math.max(...runningMeans);
+    const target = Math.min(Math.round((peakRunningMean * fractions[i]) / 5) * 5, Math.floor(peakRunningMean));
+    return { stream, target, story };
+  });
+}
 
 function Stage3RunningAverage({ onCommit, isActive }: StageCanvasProps) {
+  const [rounds] = useState(generateStage3Rounds);
   const [round, setRound] = useState(0);
   const [tickIndex, setTickIndex] = useState(0);
   const [flash, setFlash] = useState<'idle' | 'good' | 'bad'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
 
-  const isFinalRound = round === STAGE3_ROUNDS.length - 1;
-  const goal = STAGE3_ROUNDS[round];
+  const isFinalRound = round === rounds.length - 1;
+  const goal = rounds[round];
   const revealed = goal.stream.slice(0, tickIndex + 1);
   const runningMean = mean(revealed);
   const qualifies = runningMean >= goal.target;
@@ -220,13 +327,13 @@ function Stage3RunningAverage({ onCommit, isActive }: StageCanvasProps) {
       effects.trigger();
       if (isFinalRound) {
         finalRoundWonRef.current = true;
-        onCommit(runningMean);
+        onCommit(1);
       } else {
         setTimeout(() => setRound((r) => r + 1), 500);
       }
     } else {
       setFlash('bad');
-      if (isFinalRound) onCommit(runningMean);
+      if (isFinalRound) onCommit(clampScore(runningMean / goal.target));
       setTimeout(() => setFlash('idle'), 450);
     }
   }
@@ -234,7 +341,7 @@ function Stage3RunningAverage({ onCommit, isActive }: StageCanvasProps) {
   return (
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>
-        Round {round + 1} of {STAGE3_ROUNDS.length} · lock in the case once the average justifies {goal.story} (avg ≥ {goal.target})
+        Round {round + 1} of {rounds.length} · lock in the case once the average justifies {goal.story} (avg ≥ {goal.target})
       </Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Text style={styles.reportLabel}>Reports so far: {revealed.join(', ')}</Text>
@@ -266,28 +373,39 @@ function Stage3RunningAverage({ onCommit, isActive }: StageCanvasProps) {
 // Stage 4 — Mastery Sandbox: "Profile Builder Boss" — match mean AND range
 // ---------------------------------------------------------------------------
 
-const STAGE4_TARGET_MEAN = 170;
-const STAGE4_TARGET_RANGE = 30;
 const STAGE4_MATCH_THRESHOLD = 95;
 const STAGE4_MIN = 140;
 const STAGE4_MAX = 200;
+const STAGE4_START_HEIGHTS = [150, 155, 160, 165, 170];
 
-function computeMatchPercent(heights: number[]): number {
+function computeMatchPercent(heights: number[], targetMean: number, targetRange: number): number {
   const m = mean(heights);
   const range = Math.max(...heights) - Math.min(...heights);
-  const meanErrorPct = (Math.abs(m - STAGE4_TARGET_MEAN) / STAGE4_TARGET_MEAN) * 100;
-  const rangeErrorPct = (Math.abs(range - STAGE4_TARGET_RANGE) / STAGE4_TARGET_RANGE) * 100;
+  const meanErrorPct = (Math.abs(m - targetMean) / targetMean) * 100;
+  const rangeErrorPct = (Math.abs(range - targetRange) / targetRange) * 100;
   return Math.max(0, 100 - (meanErrorPct + rangeErrorPct) / 2);
 }
 
+// Randomized each playthrough, re-rolled if it would already be within
+// reach of the sliders' fixed starting position.
+function generateStage4Target(): { targetMean: number; targetRange: number } {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const targetMean = randomInt(150, 190);
+    const targetRange = randomInt(15, 45);
+    if (computeMatchPercent(STAGE4_START_HEIGHTS, targetMean, targetRange) < 80) return { targetMean, targetRange };
+  }
+  return { targetMean: 170, targetRange: 30 };
+}
+
 function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
-  const [heights, setHeights] = useState([150, 155, 160, 165, 170]);
+  const [{ targetMean, targetRange }] = useState(generateStage4Target);
+  const [heights, setHeights] = useState(STAGE4_START_HEIGHTS);
   const effects = useSuccessEffects();
   const wonRef = useRef(false);
 
   const m = mean(heights);
   const range = Math.max(...heights) - Math.min(...heights);
-  const matchPercent = computeMatchPercent(heights);
+  const matchPercent = computeMatchPercent(heights, targetMean, targetRange);
 
   useEffect(() => {
     if (!isActive || wonRef.current) return;
@@ -312,7 +430,7 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
   return (
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>
-        Boss level: build a profile with mean height {STAGE4_TARGET_MEAN}cm and range {STAGE4_TARGET_RANGE}cm — {STAGE4_MATCH_THRESHOLD}%+ to win.
+        Boss level: build a profile with mean height {targetMean}cm and range {targetRange}cm — {STAGE4_MATCH_THRESHOLD}%+ to win.
       </Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Svg width="100%" height={chartH} viewBox={`0 0 ${chartW} ${chartH}`} role="img" accessibilityLabel="Suspect height profile bar chart">
@@ -327,9 +445,9 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
           })}
           <Line
             x1={0}
-            y1={chartH - 10 - scaleY(STAGE4_TARGET_MEAN)}
+            y1={chartH - 10 - scaleY(targetMean)}
             x2={chartW}
-            y2={chartH - 10 - scaleY(STAGE4_TARGET_MEAN)}
+            y2={chartH - 10 - scaleY(targetMean)}
             stroke={matchPercent >= STAGE4_MATCH_THRESHOLD ? DL_COLORS.lime : DL_COLORS.textMuted}
             strokeWidth={2}
             strokeDasharray="6,5"
@@ -378,54 +496,66 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
 // Stage config + top-level module
 // ---------------------------------------------------------------------------
 
-const DATA_DETECTIVE_STAGES: MathStageConfig[] = [
-  {
-    id: 'foundations',
-    title: 'Foundations',
-    objective: 'Spot the median by eye, no calculation needed.',
-    targetValue: computeStats(STAGE1_CASES[STAGE1_CASES.length - 1].values)!.median,
-    baseXp: 20,
-    toleranceThreshold: 0,
-    nearMiss: { thresholdPercent: 12, message: "Close — remember to sort them first, then find the one in the middle." },
-    checkWinCondition: (value, target) => value === target,
-    renderCanvas: Stage1Foundations,
-  },
-  {
-    id: 'quantitative',
-    title: 'Quantitative Mechanics',
-    objective: 'Calculate mean, median, and mode from real case data.',
-    targetValue: STAGE2_CASES[STAGE2_CASES.length - 1].answer(STAGE2_CASES[STAGE2_CASES.length - 1].values),
-    baseXp: 40,
-    toleranceThreshold: 0,
-    nearMiss: { thresholdPercent: 15, message: "Close — double-check which measure of the data you were asked for." },
-    checkWinCondition: (value, target) => value === target,
-    renderCanvas: Stage2QuantitativeMechanics,
-  },
-  {
-    id: 'variables',
-    title: 'Running Average',
-    objective: 'Watch the average shift as new evidence arrives.',
-    targetValue: STAGE3_ROUNDS[STAGE3_ROUNDS.length - 1].target,
-    baseXp: 60,
-    toleranceThreshold: 0,
-    nearMiss: { thresholdPercent: 8, message: "So close — one more strong report would have tipped the average." },
-    checkWinCondition: (value, target) => value >= target,
-    renderCanvas: Stage3RunningAverage,
-  },
-  {
-    id: 'mastery',
-    title: 'Mastery Sandbox',
-    objective: 'Balance the evidence to match both the average and the spread.',
-    targetValue: STAGE4_MATCH_THRESHOLD,
-    baseXp: 100,
-    toleranceThreshold: 0,
-    checkWinCondition: (value, target) => value >= target,
-    renderCanvas: Stage4MasterySandbox,
-  },
-];
+function buildDataDetectiveStages(): MathStageConfig[] {
+  return [
+    {
+      id: 'foundations',
+      title: 'Foundations',
+      objective: 'Spot the median by eye, no calculation needed.',
+      targetValue: 1,
+      baseXp: 20,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 40, message: "Close — remember to sort them first, then find the one in the middle." },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage1Foundations,
+    },
+    {
+      id: 'quantitative',
+      title: 'Quantitative Mechanics',
+      objective: 'Calculate mean, median, and mode from real case data.',
+      targetValue: 1,
+      baseXp: 40,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 15, message: "Close — double-check which measure of the data you were asked for." },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage2QuantitativeMechanics,
+    },
+    {
+      id: 'variables',
+      title: 'Running Average',
+      objective: 'Watch the average shift as new evidence arrives.',
+      targetValue: 1,
+      baseXp: 60,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 8, message: "So close — one more strong report would have tipped the average." },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage3RunningAverage,
+    },
+    {
+      id: 'mastery',
+      title: 'Mastery Sandbox',
+      objective: 'Balance the evidence to match both the average and the spread.',
+      targetValue: STAGE4_MATCH_THRESHOLD,
+      baseXp: 100,
+      toleranceThreshold: 0,
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage4MasterySandbox,
+    },
+  ];
+}
 
 export default function DataDetectiveGameModule() {
-  return <DeepLearningGameScreen stages={DATA_DETECTIVE_STAGES} maxXp={220} realmId="statistics" />;
+  const [playthrough, setPlaythrough] = useState(0);
+  const stages = React.useMemo(buildDataDetectiveStages, [playthrough]);
+  return (
+    <DeepLearningGameScreen
+      key={playthrough}
+      stages={stages}
+      maxXp={220}
+      realmId="statistics"
+      onRestart={() => setPlaythrough((p) => p + 1)}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

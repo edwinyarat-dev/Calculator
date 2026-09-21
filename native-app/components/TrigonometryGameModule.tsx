@@ -10,17 +10,42 @@ import { ParticleBurst, useSuccessEffects } from '../src/features/deep-learning/
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
+function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/** Picks `count` distinct integers in [min, max], each at least minGap apart, for varied but fair rounds. */
+function pickSpacedInts(count: number, min: number, max: number, minGap: number): number[] {
+  const result: number[] = [];
+  let guard = 0;
+  while (result.length < count && guard < 300) {
+    guard++;
+    const candidate = randomInt(min, max);
+    if (result.every((v) => Math.abs(v - candidate) >= minGap)) result.push(candidate);
+  }
+  while (result.length < count) result.push(randomInt(min, max));
+  return result;
+}
+
+/** Every stage reports a 0–1 score to the engine (1 = win) instead of the raw domain value, so randomizing the underlying targets each playthrough can never desync from the fixed win check. */
+function clampScore(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
 // ---------------------------------------------------------------------------
 // Stage 1 — Foundations: match the target angle by feel
 // ---------------------------------------------------------------------------
 
-const STAGE1_TARGETS = [30, 45, 70];
 const STAGE1_TOLERANCE = 2;
 const STAGE1_HOLD_MS = 1500;
 const CANVAS_SIZE = 260;
 const CANVAS_ORIGIN_X = 40;
 const CANVAS_ORIGIN_Y = 220;
 const ARM_LENGTH = 170;
+
+function generateStage1Targets(): number[] {
+  return pickSpacedInts(3, 15, 80, 12);
+}
 
 function angleToPoint(angleDeg: number) {
   const rad = toRad(angleDeg);
@@ -31,6 +56,7 @@ function angleToPoint(angleDeg: number) {
 }
 
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
+  const [targets] = useState(generateStage1Targets);
   const [round, setRound] = useState(0);
   const [liveAngle, setLiveAngle] = useState(20);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -41,8 +67,8 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
 
-  const isFinalRound = round === STAGE1_TARGETS.length - 1;
-  const target = STAGE1_TARGETS[round];
+  const isFinalRound = round === targets.length - 1;
+  const target = targets[round];
   const withinTolerance = Math.abs(liveAngle - target) <= STAGE1_TOLERANCE;
 
   useEffect(() => {
@@ -71,7 +97,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
           setLiveAngle(20);
         } else {
           finalRoundWonRef.current = true;
-          onCommit(liveAngle);
+          onCommit(1);
         }
         return;
       }
@@ -90,7 +116,8 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   // so they stay purely local and skip this.
   function handleSlidingComplete(value: number) {
     if (isFinalRound && !finalRoundWonRef.current) {
-      onCommit(value);
+      const overshoot = Math.max(0, Math.abs(value - target) - STAGE1_TOLERANCE);
+      onCommit(clampScore(1 - overshoot / STAGE1_TOLERANCE));
     }
   }
 
@@ -99,7 +126,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Target: {target}° · Round {round + 1} of {STAGE1_TARGETS.length}</Text>
+      <Text style={styles.stageObjective}>Target: {target}° · Round {round + 1} of {targets.length}</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Svg width="100%" height={CANVAS_SIZE} viewBox={`0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`} role="img" accessibilityLabel="Angle matching triangle">
           <Line x1={CANVAS_ORIGIN_X} y1={CANVAS_ORIGIN_Y} x2={CANVAS_SIZE} y2={CANVAS_ORIGIN_Y} stroke={DL_COLORS.border} strokeWidth={1.5} />
@@ -159,12 +186,17 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 const UNIT_CIRCLE_R = 100;
 const UNIT_CIRCLE_SIZE = 260;
 const UNIT_CIRCLE_CENTER = UNIT_CIRCLE_SIZE / 2;
-const STAGE2_TARGETS = [30, 150]; // both give sin = 0.5, shown to the student
-const STAGE2_SIN_TARGET = 0.5;
-const STAGE2_SIN_TOLERANCE = 0.03; // roughly equivalent to ±2 degrees near 30°/150°
+const STAGE2_SIN_TOLERANCE = 0.03;
 const STAGE2_HOLD_MS = 1200;
 
+// Random target between 0.25 and 0.85 — avoids the near-degenerate cases
+// close to 0 or 1 where the two symmetric solution angles nearly coincide.
+function generateStage2Target(): number {
+  return Math.round((0.25 + Math.random() * 0.6) * 100) / 100;
+}
+
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
+  const [sinTarget] = useState(generateStage2Target);
   const [liveAngle, setLiveAngle] = useState(0);
   const [holdProgress, setHoldProgress] = useState(0);
   const holdStartRef = useRef<number | null>(null);
@@ -175,11 +207,10 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const sinValue = Math.sin(rad);
   const cosValue = Math.cos(rad);
 
-  // Checked against sin(theta) rather than the raw angle: sin(30°) and
-  // sin(150°) are both exactly 0.5, so this naturally treats either valid
-  // target the same way instead of only recognizing whichever one a fixed
-  // "targetValue" happened to point at.
-  const withinTolerance = Math.abs(sinValue - STAGE2_SIN_TARGET) <= STAGE2_SIN_TOLERANCE;
+  // Checked against sin(theta) rather than the raw angle: sin(theta) and
+  // sin(180-theta) are always equal, so this naturally treats either valid
+  // target angle the same way instead of only recognizing one of them.
+  const withinTolerance = Math.abs(sinValue - sinTarget) <= STAGE2_SIN_TOLERANCE;
   const wonRef = useRef(false);
 
   useEffect(() => {
@@ -200,7 +231,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         setHoldProgress(0);
         effects.trigger();
         wonRef.current = true;
-        onCommit(sinValue);
+        onCommit(1);
         return;
       }
       rafRef.current = requestAnimationFrame(tick);
@@ -215,10 +246,12 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   // A release that misses still gets evaluated so a near miss can surface
   // the encouragement banner, guarded against double-firing alongside a
   // hold-timer win that just happened. The slider gives back an angle —
-  // convert to sin(theta) before handing it to the engine.
+  // convert to sin(theta) and report how close it was as a 0–1 score.
   function handleSlidingComplete(angleValue: number) {
     if (!wonRef.current) {
-      onCommit(Math.sin(toRad(angleValue)));
+      const releasedSin = Math.sin(toRad(angleValue));
+      const overshoot = Math.max(0, Math.abs(releasedSin - sinTarget) - STAGE2_SIN_TOLERANCE);
+      onCommit(clampScore(1 - overshoot / STAGE2_SIN_TOLERANCE));
     }
     wonRef.current = false;
   }
@@ -228,7 +261,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Stop the vector where Sine (Y) = 0.5</Text>
+      <Text style={styles.stageObjective}>Stop the vector where Sine (Y) = {sinTarget.toFixed(2)}</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Svg width="100%" height={UNIT_CIRCLE_SIZE} viewBox={`0 0 ${UNIT_CIRCLE_SIZE} ${UNIT_CIRCLE_SIZE}`} role="img" accessibilityLabel="Unit circle">
           <Line x1={0} y1={UNIT_CIRCLE_CENTER} x2={UNIT_CIRCLE_SIZE} y2={UNIT_CIRCLE_CENTER} stroke={DL_COLORS.border} strokeWidth={1.5} />
@@ -236,7 +269,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
           <Circle cx={UNIT_CIRCLE_CENTER} cy={UNIT_CIRCLE_CENTER} r={UNIT_CIRCLE_R} fill="none" stroke={DL_COLORS.textMuted} strokeWidth={2} />
 
           {/* target sine line, ghosted */}
-          <Line x1={0} y1={UNIT_CIRCLE_CENTER - 0.5 * UNIT_CIRCLE_R} x2={UNIT_CIRCLE_SIZE} y2={UNIT_CIRCLE_CENTER - 0.5 * UNIT_CIRCLE_R} stroke={DL_COLORS.amethystSoft} strokeWidth={2} strokeDasharray="5,5" />
+          <Line x1={0} y1={UNIT_CIRCLE_CENTER - sinTarget * UNIT_CIRCLE_R} x2={UNIT_CIRCLE_SIZE} y2={UNIT_CIRCLE_CENTER - sinTarget * UNIT_CIRCLE_R} stroke={DL_COLORS.amethystSoft} strokeWidth={2} strokeDasharray="5,5" />
 
           {/* projections */}
           <Line x1={UNIT_CIRCLE_CENTER} y1={UNIT_CIRCLE_CENTER} x2={tipX} y2={UNIT_CIRCLE_CENTER} stroke={DL_COLORS.amethyst} strokeWidth={4} strokeLinecap="round" />
@@ -278,7 +311,9 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         thumbTintColor={withinTolerance ? DL_COLORS.lime : DL_COLORS.amethyst}
         accessibilityLabel="Vector angle dial"
       />
-      <Text style={styles.stageHint}>θ = {Math.round(liveAngle)}° — try 30° or 150°.</Text>
+      <Text style={styles.stageHint}>
+        θ = {Math.round(liveAngle)}° — try {Math.round((Math.asin(sinTarget) * 180) / Math.PI)}° or {180 - Math.round((Math.asin(sinTarget) * 180) / Math.PI)}°.
+      </Text>
     </View>
   );
 }
@@ -287,12 +322,26 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 // Stage 3 — Variables Challenge: hold the peak against a drifting variable
 // ---------------------------------------------------------------------------
 
-const STAGE3_SPEED_DEG_PER_TICK = 0.6;
 const STAGE3_TICK_MS = 30;
-const STAGE3_PEAK_THRESHOLD = 0.95; // sin(theta) must stay above this
 const STAGE3_HOLD_MS = 5000;
 
+// Randomized within a band each playthrough for variety — safe to randomize
+// freely since this stage only ever reports onCommit(1) on a win, never a
+// raw value, so there's no engine target to desync from.
+// Kept within a tight band around the originally-tuned (0.6, 0.95) pair —
+// the combination of slowest speed + narrowest peak zone sets the worst-case
+// time to clear this stage, so a wide random range here would make some
+// playthroughs far grindier than others. This band's worst case matches the
+// original fixed value's worst case exactly.
+function generateStage3Difficulty(): { speedPerTick: number; peakThreshold: number } {
+  return {
+    speedPerTick: 0.55 + Math.random() * 0.2,
+    peakThreshold: 0.93 + Math.random() * 0.02,
+  };
+}
+
 function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
+  const [{ speedPerTick, peakThreshold }] = useState(generateStage3Difficulty);
   const [theta, setTheta] = useState(0);
   const [locking, setLocking] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -308,13 +357,13 @@ function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
   useEffect(() => {
     if (!isActive) return;
     const id = setInterval(() => {
-      setTheta((t) => (t + STAGE3_SPEED_DEG_PER_TICK) % 360);
+      setTheta((t) => (t + speedPerTick) % 360);
     }, STAGE3_TICK_MS);
     return () => clearInterval(id);
-  }, [isActive]);
+  }, [isActive, speedPerTick]);
 
   const sinValue = Math.sin(toRad(theta));
-  const nearPeak = sinValue >= STAGE3_PEAK_THRESHOLD;
+  const nearPeak = sinValue >= peakThreshold;
   const engaged = locking && nearPeak;
 
   useEffect(() => {
@@ -350,7 +399,7 @@ function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Svg width="100%" height={200} viewBox="0 0 260 200" role="img" accessibilityLabel="Peak meter">
           <Line x1={40} y1={20} x2={40} y2={180} stroke={DL_COLORS.border} strokeWidth={1.5} />
-          <Line x1={20} y1={180 - STAGE3_PEAK_THRESHOLD * 140} x2={220} y2={180 - STAGE3_PEAK_THRESHOLD * 140} stroke={DL_COLORS.amethystSoft} strokeWidth={2} strokeDasharray="5,5" />
+          <Line x1={20} y1={180 - peakThreshold * 140} x2={220} y2={180 - peakThreshold * 140} stroke={DL_COLORS.amethystSoft} strokeWidth={2} strokeDasharray="5,5" />
           <Path
             d={`M20,${180 - meterHeight} L60,${180 - meterHeight} L60,180 L20,180 Z`}
             fill={engaged ? DL_COLORS.lime : nearPeak ? DL_COLORS.amethyst : DL_COLORS.surfaceMuted}
@@ -370,11 +419,13 @@ function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
       <Pressable
         onPressIn={() => setLocking(true)}
         onPressOut={() => setLocking(false)}
+        accessibilityRole="button"
+        accessibilityLabel="Hold at peak"
         style={[styles.lockButton, engaged && styles.lockButtonEngaged]}
       >
         <Text style={styles.lockButtonText}>{locking ? (nearPeak ? '🔒 Locked in!' : '🔓 Not yet…') : '🔒 HOLD AT PEAK'}</Text>
       </Pressable>
-      <Text style={styles.stageHint}>θ drifts on its own — press and hold right as sin(θ) crosses {STAGE3_PEAK_THRESHOLD}.</Text>
+      <Text style={styles.stageHint}>θ drifts on its own — press and hold right as sin(θ) crosses {peakThreshold.toFixed(2)}.</Text>
     </View>
   );
 }
@@ -383,11 +434,17 @@ function Stage3VariablesChallenge({ onCommit, isActive }: StageCanvasProps) {
 // Stage 4 — Mastery Sandbox: duplicate the target wave
 // ---------------------------------------------------------------------------
 
-const WAVE_TARGET = { amplitude: 0.7, frequency: 2, phase: 30 };
+interface WaveParams {
+  amplitude: number;
+  frequency: number;
+  phase: number;
+}
+
 const WAVE_SAMPLES = 36;
 const WAVE_W = 280;
 const WAVE_H = 180;
 const WAVE_PAD = 16;
+const STAGE4_START: WaveParams = { amplitude: 1, frequency: 1, phase: 0 };
 
 function waveValue(x: number, amp: number, freq: number, phaseDeg: number) {
   return amp * Math.sin(toRad(x * freq + phaseDeg));
@@ -407,27 +464,44 @@ function buildWavePath(amp: number, freq: number, phaseDeg: number) {
   return points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.sx},${p.sy}`).join(' ');
 }
 
-function computeMatchPercent(amp: number, freq: number, phaseDeg: number) {
+function computeMatchPercent(amp: number, freq: number, phaseDeg: number, target: WaveParams) {
   let totalDiff = 0;
   for (let i = 0; i <= WAVE_SAMPLES; i++) {
     const x = (i / WAVE_SAMPLES) * 360;
-    const target = waveValue(x, WAVE_TARGET.amplitude, WAVE_TARGET.frequency, WAVE_TARGET.phase);
+    const targetY = waveValue(x, target.amplitude, target.frequency, target.phase);
     const mine = waveValue(x, amp, freq, phaseDeg);
-    totalDiff += Math.abs(target - mine);
+    totalDiff += Math.abs(targetY - mine);
   }
   const avgDiff = totalDiff / (WAVE_SAMPLES + 1);
   const match = 100 * (1 - avgDiff / 1.5);
   return Math.max(0, Math.min(100, match));
 }
 
+// Randomized each playthrough, but re-rolled if it would happen to already
+// match the sliders' fixed starting position — a boss level should never
+// win itself before the player touches anything.
+function generateWaveTarget(): WaveParams {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const candidate: WaveParams = {
+      amplitude: Math.round((0.4 + Math.random() * 0.9) * 100) / 100,
+      frequency: Math.round((1.2 + Math.random() * 1.6) * 100) / 100,
+      phase: randomInt(10, 350),
+    };
+    const startingMatch = computeMatchPercent(STAGE4_START.amplitude, STAGE4_START.frequency, STAGE4_START.phase, candidate);
+    if (startingMatch < 80) return candidate;
+  }
+  return { amplitude: 0.7, frequency: 2, phase: 30 };
+}
+
 function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
-  const [amplitude, setAmplitude] = useState(1);
-  const [frequency, setFrequency] = useState(1);
-  const [phase, setPhase] = useState(0);
+  const [target] = useState(generateWaveTarget);
+  const [amplitude, setAmplitude] = useState(STAGE4_START.amplitude);
+  const [frequency, setFrequency] = useState(STAGE4_START.frequency);
+  const [phase, setPhase] = useState(STAGE4_START.phase);
   const effects = useSuccessEffects();
   const wonRef = useRef(false);
 
-  const matchPercent = computeMatchPercent(amplitude, frequency, phase);
+  const matchPercent = computeMatchPercent(amplitude, frequency, phase, target);
 
   useEffect(() => {
     if (!isActive || wonRef.current) return;
@@ -439,7 +513,7 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchPercent, isActive]);
 
-  const targetPath = useMemo(() => buildWavePath(WAVE_TARGET.amplitude, WAVE_TARGET.frequency, WAVE_TARGET.phase), []);
+  const targetPath = useMemo(() => buildWavePath(target.amplitude, target.frequency, target.phase), [target]);
   const mineePath = buildWavePath(amplitude, frequency, phase);
 
   return (
@@ -477,56 +551,65 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
 // Stage config + top-level module
 // ---------------------------------------------------------------------------
 
-const TRIG_STAGES: MathStageConfig[] = [
-  {
-    id: 'foundations',
-    title: 'Foundations',
-    objective: 'Match the target angle using visual intuition alone.',
-    targetValue: STAGE1_TARGETS[STAGE1_TARGETS.length - 1],
-    baseXp: 20,
-    toleranceThreshold: STAGE1_TOLERANCE,
-    nearMiss: { thresholdPercent: 8, message: 'In touching distance! Nudge it a hair closer.' },
-    checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
-    renderCanvas: Stage1Foundations,
-  },
-  {
-    id: 'quantitative',
-    title: 'Quantitative Mechanics',
-    objective: 'Align sine and cosine on the unit circle grid.',
-    // Checked in sin(theta)-space, not degrees — sin(30°) and sin(150°) are
-    // both exactly 0.5, so this treats either valid angle identically. See
-    // Stage2QuantitativeMechanics for the angle -> sin conversion.
-    targetValue: STAGE2_SIN_TARGET,
-    baseXp: 40,
-    toleranceThreshold: STAGE2_SIN_TOLERANCE,
-    nearMiss: { thresholdPercent: 15, message: 'So close — the sine value is almost exactly 0.5!' },
-    checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
-    renderCanvas: Stage2QuantitativeMechanics,
-  },
-  {
-    id: 'variables',
-    title: 'The Variables Challenge',
-    objective: 'Hold the dependent variable at its peak as it fluctuates.',
-    targetValue: 1,
-    baseXp: 60,
-    toleranceThreshold: 0.001,
-    checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
-    renderCanvas: Stage3VariablesChallenge,
-  },
-  {
-    id: 'mastery',
-    title: 'Mastery Sandbox',
-    objective: 'Freely tune every parameter to duplicate the target wave.',
-    targetValue: 95,
-    baseXp: 100,
-    toleranceThreshold: 0,
-    checkWinCondition: (value, target) => value >= target,
-    renderCanvas: Stage4MasterySandbox,
-  },
-];
+function buildTrigStages(): MathStageConfig[] {
+  return [
+    {
+      id: 'foundations',
+      title: 'Foundations',
+      objective: 'Match the target angle using visual intuition alone.',
+      targetValue: 1,
+      baseXp: 20,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 60, message: 'In touching distance! Nudge it a hair closer.' },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage1Foundations,
+    },
+    {
+      id: 'quantitative',
+      title: 'Quantitative Mechanics',
+      objective: 'Align sine and cosine on the unit circle grid.',
+      targetValue: 1,
+      baseXp: 40,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 50, message: 'So close — the sine value is almost exactly right!' },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage2QuantitativeMechanics,
+    },
+    {
+      id: 'variables',
+      title: 'The Variables Challenge',
+      objective: 'Hold the dependent variable at its peak as it fluctuates.',
+      targetValue: 1,
+      baseXp: 60,
+      toleranceThreshold: 0.001,
+      checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
+      renderCanvas: Stage3VariablesChallenge,
+    },
+    {
+      id: 'mastery',
+      title: 'Mastery Sandbox',
+      objective: 'Freely tune every parameter to duplicate the target wave.',
+      targetValue: 95,
+      baseXp: 100,
+      toleranceThreshold: 0,
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage4MasterySandbox,
+    },
+  ];
+}
 
 export default function TrigonometryGameModule() {
-  return <DeepLearningGameScreen stages={TRIG_STAGES} maxXp={220} realmId="trigonometry" />;
+  const [playthrough, setPlaythrough] = useState(0);
+  const stages = useMemo(buildTrigStages, [playthrough]);
+  return (
+    <DeepLearningGameScreen
+      key={playthrough}
+      stages={stages}
+      maxXp={220}
+      realmId="trigonometry"
+      onRestart={() => setPlaythrough((p) => p + 1)}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

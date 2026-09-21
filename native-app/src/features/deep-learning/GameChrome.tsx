@@ -61,7 +61,16 @@ export function NearMissBanner() {
   );
 }
 
-export function StageCompleteBanner({ visible, isFinalStage, onContinue }: { visible: boolean; isFinalStage: boolean; onContinue: () => void }) {
+export function StageCompleteBanner({
+  visible,
+  isFinalStage,
+  onContinue,
+}: {
+  visible: boolean;
+  isFinalStage: boolean;
+  /** Advances to the next stage, or — on the final stage — restarts the module with fresh numbers. */
+  onContinue: () => void;
+}) {
   const slide = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -76,14 +85,19 @@ export function StageCompleteBanner({ visible, isFinalStage, onContinue }: { vis
     <Animated.View style={[styles.completeBanner, { opacity: slide, transform: [{ translateY }] }]}>
       <Text style={styles.completeEmoji}>{isFinalStage ? '🏆' : '⚡'}</Text>
       <Text style={styles.completeTitle}>{isFinalStage ? 'Module Mastered!' : 'Stage Cleared!'}</Text>
-      <Pressable style={styles.continueButton} onPress={onContinue}>
-        <Text style={styles.continueButtonText}>{isFinalStage ? 'Finish' : 'Continue ➔'}</Text>
+      <Pressable
+        style={styles.continueButton}
+        onPress={onContinue}
+        accessibilityRole="button"
+        accessibilityLabel={isFinalStage ? 'Play again' : 'Continue to next stage'}
+      >
+        <Text style={styles.continueButtonText}>{isFinalStage ? 'Play Again ↻' : 'Continue ➔'}</Text>
       </Pressable>
     </Animated.View>
   );
 }
 
-function GameInner({ maxXp, realmId }: { maxXp: number; realmId?: string }) {
+function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: string; onRestart: () => void }) {
   const { stages, activeStageIndex, activeStage, unlockedStages, submitInput, goToStage, lastResult, xpEarned } = useDeepLearning();
   const [showBanner, setShowBanner] = useState(false);
   const prevXpRef = useRef(0);
@@ -108,7 +122,11 @@ function GameInner({ maxXp, realmId }: { maxXp: number; realmId?: string }) {
 
   function handleContinue() {
     setShowBanner(false);
-    if (!isFinalStage) goToStage(activeStageIndex + 1);
+    if (!isFinalStage) {
+      goToStage(activeStageIndex + 1);
+    } else {
+      onRestart();
+    }
   }
 
   const StageCanvas = activeStage.renderCanvas;
@@ -141,16 +159,19 @@ export function DeepLearningGameScreen({
   stages,
   maxXp,
   realmId,
+  onRestart,
 }: {
   stages: MathStageConfig[];
   maxXp: number;
   /** Module key (e.g. 'arithmetic') used to mark this realm cleared in the global Hero state on mastery. */
   realmId?: string;
+  /** Called when the player taps "Play Again" after mastering the final stage — the caller should regenerate fresh random content and remount this tree (e.g. via a changing `key`). */
+  onRestart?: () => void;
 }) {
   return (
     <DeepLearningProvider stages={stages}>
       <View style={styles.root}>
-        <GameInner maxXp={maxXp} realmId={realmId} />
+        <GameInner maxXp={maxXp} realmId={realmId} onRestart={onRestart ?? (() => {})} />
       </View>
     </DeepLearningProvider>
   );

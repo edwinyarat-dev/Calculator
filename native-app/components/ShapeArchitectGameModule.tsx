@@ -9,15 +9,18 @@ import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
 import { ParticleBurst, useSuccessEffects } from '../src/features/deep-learning/useSuccessEffects';
 
+function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function clampScore(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
 // ---------------------------------------------------------------------------
 // Stage 1 — Foundations: "Blueprint Match", resize a room to match a plan
 // ---------------------------------------------------------------------------
 
-const STAGE1_ROOMS = [
-  { width: 6, height: 4 },
-  { width: 8, height: 5 },
-  { width: 9, height: 7 },
-];
 const STAGE1_TOLERANCE = 0.5;
 const STAGE1_HOLD_MS = 1200;
 const CANVAS_SIZE = 220;
@@ -25,7 +28,12 @@ const SCALE = 16;
 const ORIGIN_X = 40;
 const ORIGIN_Y = 190;
 
+function generateStage1Rooms(): { width: number; height: number }[] {
+  return Array.from({ length: 3 }, () => ({ width: randomInt(4, 11), height: randomInt(3, 9) }));
+}
+
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
+  const [rooms] = useState(generateStage1Rooms);
   const [round, setRound] = useState(0);
   const [liveWidth, setLiveWidth] = useState(3);
   const [liveHeight, setLiveHeight] = useState(3);
@@ -35,8 +43,8 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
 
-  const isFinalRound = round === STAGE1_ROOMS.length - 1;
-  const target = STAGE1_ROOMS[round];
+  const isFinalRound = round === rooms.length - 1;
+  const target = rooms[round];
   const withinTolerance =
     Math.abs(liveWidth - target.width) <= STAGE1_TOLERANCE && Math.abs(liveHeight - target.height) <= STAGE1_TOLERANCE;
 
@@ -67,7 +75,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
           setRound((r) => r + 1);
         } else {
           finalRoundWonRef.current = true;
-          onCommit(liveWidth * liveHeight);
+          onCommit(1);
         }
         return;
       }
@@ -81,7 +89,11 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   }, [withinTolerance, isActive, round]);
 
   function handleRelease() {
-    if (isFinalRound && !finalRoundWonRef.current) onCommit(liveWidth * liveHeight);
+    if (isFinalRound && !finalRoundWonRef.current) {
+      const errW = Math.max(0, Math.abs(liveWidth - target.width) - STAGE1_TOLERANCE);
+      const errH = Math.max(0, Math.abs(liveHeight - target.height) - STAGE1_TOLERANCE);
+      onCommit(clampScore(1 - (errW + errH) / (2 * STAGE1_TOLERANCE)));
+    }
   }
 
   const targetW = target.width * SCALE;
@@ -92,7 +104,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   return (
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>
-        Round {round + 1} of {STAGE1_ROOMS.length} · blueprint calls for a {target.width}×{target.height} room
+        Round {round + 1} of {rooms.length} · blueprint calls for a {target.width}×{target.height} room
       </Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Svg width="100%" height={CANVAS_SIZE} viewBox={`0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`} role="img" accessibilityLabel="Blueprint room diagram">
@@ -168,22 +180,38 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 // Stage 2 — Quantitative Mechanics: real jobs that need area & perimeter
 // ---------------------------------------------------------------------------
 
-const STAGE2_PROBLEMS = [
-  { prompt: "A rectangular garden is 5 units by 3 units. How many units of fencing (the perimeter) do you need to enclose it?", answer: 16 },
-  { prompt: "A triangular pennant flag has three 10-unit sides. How many units of trim (the perimeter) does it need?", answer: 30 },
-  { prompt: "A circular pool has a 7-unit radius. Rounded to the nearest whole number, how many square units of tile cover it?", answer: Math.round(Math.PI * 49) },
-];
-const STAGE2_NEAR_MISS_PERCENT = 10;
+interface GeometryProblem {
+  prompt: string;
+  answer: number;
+}
+
+function generateStage2Problems(): GeometryProblem[] {
+  const rectW = randomInt(3, 9);
+  const rectH = randomInt(2, 8);
+  const triSide = randomInt(5, 15);
+  const circleR = randomInt(3, 10);
+  return [
+    { prompt: `A rectangular garden is ${rectW} units by ${rectH} units. How many units of fencing (the perimeter) do you need to enclose it?`, answer: 2 * (rectW + rectH) },
+    { prompt: `A triangular pennant flag has three ${triSide}-unit sides. How many units of trim (the perimeter) does it need?`, answer: 3 * triSide },
+    { prompt: `A circular pool has a ${circleR}-unit radius. Rounded to the nearest whole number, how many square units of tile cover it?`, answer: Math.round(Math.PI * circleR * circleR) },
+  ];
+}
+
+/** How close a wrong final-round answer was, as a 0–1 score — reported instead of the raw typed value so randomized problems can't desync the fixed win check. */
+function scoreAgainst(typed: number, answer: number): number {
+  return clampScore(1 - Math.abs(typed - answer) / Math.max(1, Math.abs(answer)));
+}
 
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
+  const [problems] = useState(generateStage2Problems);
   const [round, setRound] = useState(0);
   const [entry, setEntry] = useState('');
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
 
-  const isFinalRound = round === STAGE2_PROBLEMS.length - 1;
-  const problem = STAGE2_PROBLEMS[round];
+  const isFinalRound = round === problems.length - 1;
+  const problem = problems[round];
 
   useEffect(() => {
     finalRoundWonRef.current = false;
@@ -208,13 +236,13 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
       effects.trigger();
       if (isFinalRound) {
         finalRoundWonRef.current = true;
-        onCommit(value);
+        onCommit(1);
       } else {
         setRound((r) => r + 1);
       }
     } else {
       setFeedback('wrong');
-      if (isFinalRound) onCommit(value);
+      if (isFinalRound) onCommit(scoreAgainst(value, problem.answer));
       setTimeout(() => {
         setEntry('');
         setFeedback('idle');
@@ -224,7 +252,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
-      <Text style={styles.stageObjective}>Round {round + 1} of {STAGE2_PROBLEMS.length} · real jobs that need geometry</Text>
+      <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · real jobs that need geometry</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <EntryDisplay prompt={problem.prompt} entry={entry} feedback={feedback} />
         {effects.isBursting && (
@@ -242,13 +270,18 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 // Stage 3 — Variables Challenge: "Fence Optimizer" — max area, fixed perimeter
 // ---------------------------------------------------------------------------
 
-const STAGE3_ROUNDS = [
-  { perimeter: 40, winThreshold: 95 },
-  { perimeter: 60, winThreshold: 213.75 },
-];
 const STAGE3_HOLD_MS = 1200;
 
+// Each round's win threshold is 95% of that perimeter's true maximum area
+// (P/4)² — computed directly from the randomized perimeter, so it's always
+// exactly as achievable regardless of what perimeters come up.
+function generateStage3Rounds(): { perimeter: number; winThreshold: number }[] {
+  const perimeters = [randomInt(30, 44), randomInt(50, 70)];
+  return perimeters.map((perimeter) => ({ perimeter, winThreshold: 0.95 * (perimeter / 4) ** 2 }));
+}
+
 function Stage3FenceOptimizer({ onCommit, isActive }: StageCanvasProps) {
+  const [rounds] = useState(generateStage3Rounds);
   const [round, setRound] = useState(0);
   const [width, setWidth] = useState(2);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -257,8 +290,8 @@ function Stage3FenceOptimizer({ onCommit, isActive }: StageCanvasProps) {
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
 
-  const isFinalRound = round === STAGE3_ROUNDS.length - 1;
-  const goal = STAGE3_ROUNDS[round];
+  const isFinalRound = round === rounds.length - 1;
+  const goal = rounds[round];
   const halfPerimeter = goal.perimeter / 2;
   const height = halfPerimeter - width;
   const area = width * height;
@@ -291,7 +324,7 @@ function Stage3FenceOptimizer({ onCommit, isActive }: StageCanvasProps) {
           setRound((r) => r + 1);
         } else {
           finalRoundWonRef.current = true;
-          onCommit(area);
+          onCommit(1);
         }
         return;
       }
@@ -305,7 +338,7 @@ function Stage3FenceOptimizer({ onCommit, isActive }: StageCanvasProps) {
   }, [atMax, isActive, round]);
 
   function handleRelease() {
-    if (isFinalRound && !finalRoundWonRef.current) onCommit(area);
+    if (isFinalRound && !finalRoundWonRef.current) onCommit(clampScore(area / goal.winThreshold));
   }
 
   const plotScale = 3.2;
@@ -313,7 +346,7 @@ function Stage3FenceOptimizer({ onCommit, isActive }: StageCanvasProps) {
   return (
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>
-        Round {round + 1} of {STAGE3_ROUNDS.length} · exactly {goal.perimeter}ft of fencing — find the biggest garden
+        Round {round + 1} of {rounds.length} · exactly {goal.perimeter}ft of fencing — find the biggest garden
       </Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Svg width="100%" height={160} viewBox="0 0 260 160" role="img" accessibilityLabel="Fenced garden diagram">
@@ -373,24 +406,35 @@ function Stage3FenceOptimizer({ onCommit, isActive }: StageCanvasProps) {
 // Stage 4 — Mastery Sandbox: "Architect Boss" — a composite floor plan
 // ---------------------------------------------------------------------------
 
-const STAGE4_TARGET_AREA = 200;
 const STAGE4_MATCH_THRESHOLD = 95;
+const STAGE4_START = { width: 8, height: 6, radius: 3 };
 
-function computeMatchPercent(width: number, height: number, radius: number): number {
+function computeMatchPercent(width: number, height: number, radius: number, targetArea: number): number {
   const total = width * height + Math.PI * radius * radius;
-  const diffPercent = (Math.abs(total - STAGE4_TARGET_AREA) / STAGE4_TARGET_AREA) * 100;
+  const diffPercent = (Math.abs(total - targetArea) / targetArea) * 100;
   return Math.max(0, 100 - diffPercent);
 }
 
+// Randomized each playthrough, re-rolled if it would already be within
+// reach of the sliders' fixed starting position.
+function generateStage4TargetArea(): number {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const targetArea = randomInt(12, 40) * 10;
+    if (computeMatchPercent(STAGE4_START.width, STAGE4_START.height, STAGE4_START.radius, targetArea) < 80) return targetArea;
+  }
+  return 200;
+}
+
 function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
-  const [width, setWidth] = useState(8);
-  const [height, setHeight] = useState(6);
-  const [radius, setRadius] = useState(3);
+  const [targetArea] = useState(generateStage4TargetArea);
+  const [width, setWidth] = useState(STAGE4_START.width);
+  const [height, setHeight] = useState(STAGE4_START.height);
+  const [radius, setRadius] = useState(STAGE4_START.radius);
   const effects = useSuccessEffects();
   const wonRef = useRef(false);
 
   const total = width * height + Math.PI * radius * radius;
-  const matchPercent = computeMatchPercent(width, height, radius);
+  const matchPercent = computeMatchPercent(width, height, radius, targetArea);
 
   useEffect(() => {
     if (!isActive || wonRef.current) return;
@@ -410,7 +454,7 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
   return (
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>
-        Boss level: design a great hall + round tower matching a {STAGE4_TARGET_AREA} sq unit blueprint — {STAGE4_MATCH_THRESHOLD}%+ to win.
+        Boss level: design a great hall + round tower matching a {targetArea} sq unit blueprint — {STAGE4_MATCH_THRESHOLD}%+ to win.
       </Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Svg width="100%" height={180} viewBox="0 0 260 180" role="img" accessibilityLabel="Composite floor plan">
@@ -459,63 +503,66 @@ function Stage4MasterySandbox({ onCommit, isActive }: StageCanvasProps) {
 // Stage config + top-level module
 // ---------------------------------------------------------------------------
 
-const SHAPE_ARCHITECT_STAGES: MathStageConfig[] = [
-  {
-    id: 'foundations',
-    title: 'Foundations',
-    objective: 'Resize a room to match a blueprint by eye.',
-    targetValue: STAGE1_ROOMS[STAGE1_ROOMS.length - 1].width * STAGE1_ROOMS[STAGE1_ROOMS.length - 1].height,
-    baseXp: 20,
-    // The component wins when BOTH width and height are independently within
-    // ±STAGE1_TOLERANCE, but this config can only check a single scalar
-    // (area). This is the exact worst-case area deviation when both
-    // dimensions sit at their tolerance boundary in the same direction —
-    // (w+t)(h+t) - wh = wt + ht + t² — so the engine's area check can never
-    // disagree with (reject a win the component already granted).
-    toleranceThreshold:
-      STAGE1_ROOMS[STAGE1_ROOMS.length - 1].width * STAGE1_TOLERANCE +
-      STAGE1_ROOMS[STAGE1_ROOMS.length - 1].height * STAGE1_TOLERANCE +
-      STAGE1_TOLERANCE * STAGE1_TOLERANCE,
-    nearMiss: { thresholdPercent: 12, message: 'Almost the right size — nudge one wall a little closer.' },
-    checkWinCondition: (value, target, tolerance) => Math.abs(value - target) <= tolerance,
-    renderCanvas: Stage1Foundations,
-  },
-  {
-    id: 'quantitative',
-    title: 'Quantitative Mechanics',
-    objective: 'Area and perimeter for real construction jobs.',
-    targetValue: STAGE2_PROBLEMS[STAGE2_PROBLEMS.length - 1].answer,
-    baseXp: 40,
-    toleranceThreshold: 0,
-    nearMiss: { thresholdPercent: STAGE2_NEAR_MISS_PERCENT, message: 'Close — double check your formula for that shape.' },
-    checkWinCondition: (value, target) => value === target,
-    renderCanvas: Stage2QuantitativeMechanics,
-  },
-  {
-    id: 'variables',
-    title: 'Fence Optimizer',
-    objective: 'Fixed fence length, changing shape — find the max area.',
-    targetValue: STAGE3_ROUNDS[STAGE3_ROUNDS.length - 1].winThreshold,
-    baseXp: 60,
-    toleranceThreshold: 0,
-    nearMiss: { thresholdPercent: 10, message: "So close to the max — a square uses fencing the most efficiently." },
-    checkWinCondition: (value, target) => value >= target,
-    renderCanvas: Stage3FenceOptimizer,
-  },
-  {
-    id: 'mastery',
-    title: 'Mastery Sandbox',
-    objective: 'Combine a rectangle and a circle to match a target blueprint.',
-    targetValue: STAGE4_MATCH_THRESHOLD,
-    baseXp: 100,
-    toleranceThreshold: 0,
-    checkWinCondition: (value, target) => value >= target,
-    renderCanvas: Stage4MasterySandbox,
-  },
-];
+function buildShapeArchitectStages(): MathStageConfig[] {
+  return [
+    {
+      id: 'foundations',
+      title: 'Foundations',
+      objective: 'Resize a room to match a blueprint by eye.',
+      targetValue: 1,
+      baseXp: 20,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 40, message: 'Almost the right size — nudge one wall a little closer.' },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage1Foundations,
+    },
+    {
+      id: 'quantitative',
+      title: 'Quantitative Mechanics',
+      objective: 'Area and perimeter for real construction jobs.',
+      targetValue: 1,
+      baseXp: 40,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 10, message: 'Close — double check your formula for that shape.' },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage2QuantitativeMechanics,
+    },
+    {
+      id: 'variables',
+      title: 'Fence Optimizer',
+      objective: 'Fixed fence length, changing shape — find the max area.',
+      targetValue: 1,
+      baseXp: 60,
+      toleranceThreshold: 0,
+      nearMiss: { thresholdPercent: 10, message: "So close to the max — a square uses fencing the most efficiently." },
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage3FenceOptimizer,
+    },
+    {
+      id: 'mastery',
+      title: 'Mastery Sandbox',
+      objective: 'Combine a rectangle and a circle to match a target blueprint.',
+      targetValue: STAGE4_MATCH_THRESHOLD,
+      baseXp: 100,
+      toleranceThreshold: 0,
+      checkWinCondition: (value, target) => value >= target,
+      renderCanvas: Stage4MasterySandbox,
+    },
+  ];
+}
 
 export default function ShapeArchitectGameModule() {
-  return <DeepLearningGameScreen stages={SHAPE_ARCHITECT_STAGES} maxXp={220} realmId="geometry" />;
+  const [playthrough, setPlaythrough] = useState(0);
+  const stages = React.useMemo(buildShapeArchitectStages, [playthrough]);
+  return (
+    <DeepLearningGameScreen
+      key={playthrough}
+      stages={stages}
+      maxXp={220}
+      realmId="geometry"
+      onRestart={() => setPlaythrough((p) => p + 1)}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
