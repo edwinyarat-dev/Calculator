@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { awardXP, markRealmCleared, recordRunStats, useGameState } from '../../utils/gameState';
-import { HERO_IDENTITY, MODULES } from '../../../theme';
+import { getHeroCharacter, MODULES } from '../../../theme';
 import { BattlePulseProvider } from './BattlePulseContext';
 import { BattleStage } from './BattleStage';
 import { DeepLearningProvider, useDeepLearning } from './DeepLearningContext';
@@ -65,13 +65,14 @@ function VitalBar({
  * up MP, capped) so it never touches the real stage scoring or win conditions underneath. */
 function HeroVitalsBay({ hp, mp, xpEarned, maxXp, streakCount }: { hp: number; mp: number; xpEarned: number; maxXp: number; streakCount: number }) {
   const hero = useGameState();
+  const heroCharacter = getHeroCharacter(hero.characterId);
   const isHot = streakCount >= 3;
 
   return (
     <View style={styles.hudBay}>
       <View style={styles.hudIdentityRow}>
         <Text style={styles.hudIdentity}>
-          Lv {hero.level} {hero.title} · {HERO_IDENTITY.name}
+          Lv {hero.level} {hero.title} · {heroCharacter.name}
         </Text>
         {streakCount > 0 && (
           <View style={[styles.streakBadge, isHot && styles.streakBadgeHot]}>

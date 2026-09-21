@@ -45,6 +45,8 @@ export interface HeroState {
   bestStreakEver: number;
   /** Badge ids earned so far — see BADGES below for id → label/description. */
   badges: string[];
+  /** Id into `HERO_CHARACTERS` (theme.ts). Null means the player hasn't picked one yet — the welcome/character-select onboarding gates on this. */
+  characterId: string | null;
 }
 
 export interface BadgeDef {
@@ -92,10 +94,11 @@ function buildState(
   totalAttempts = 0,
   totalCorrect = 0,
   bestStreakEver = 0,
-  badges: string[] = []
+  badges: string[] = [],
+  characterId: string | null = null
 ): HeroState {
   const level = levelForXp(totalXp);
-  return { totalXp, level, title: titleForLevel(level), clearedRealms, totalAttempts, totalCorrect, bestStreakEver, badges };
+  return { totalXp, level, title: titleForLevel(level), clearedRealms, totalAttempts, totalCorrect, bestStreakEver, badges, characterId };
 }
 
 /** How far into the current level the Hero is, and how much the level spans — for an XP bar. */
@@ -138,6 +141,7 @@ export function hydrateGameState(): Promise<HeroState> {
           totalCorrect?: number;
           bestStreakEver?: number;
           badges?: string[];
+          characterId?: string | null;
         };
         state = buildState(
           saved.totalXp ?? 0,
@@ -145,7 +149,8 @@ export function hydrateGameState(): Promise<HeroState> {
           saved.totalAttempts ?? 0,
           saved.totalCorrect ?? 0,
           saved.bestStreakEver ?? 0,
-          saved.badges ?? []
+          saved.badges ?? [],
+          saved.characterId ?? null
         );
       }
       hydrated = true;
@@ -184,7 +189,8 @@ export function awardXP(amount: number): AwardXpResult {
     state.totalAttempts,
     state.totalCorrect,
     state.bestStreakEver,
-    badges
+    badges,
+    state.characterId
   );
   persist();
   notify();
@@ -197,7 +203,7 @@ export function markRealmCleared(realmId: string): void {
   const clearedRealms = [...state.clearedRealms, realmId];
   let badges = state.badges;
   if (clearedRealms.length >= MODULES.length) badges = withBadge(badges, 'hexad');
-  state = buildState(state.totalXp, clearedRealms, state.totalAttempts, state.totalCorrect, state.bestStreakEver, badges);
+  state = buildState(state.totalXp, clearedRealms, state.totalAttempts, state.totalCorrect, state.bestStreakEver, badges, state.characterId);
   persist();
   notify();
 }
@@ -212,7 +218,14 @@ export function recordRunStats({ attempts, correct, bestStreak }: RunStats): voi
   if (attempts > 0 && correct === attempts) badges = withBadge(badges, 'perfectionist');
   if (bestStreak >= 5) badges = withBadge(badges, 'streak-master');
 
-  state = buildState(state.totalXp, state.clearedRealms, totalAttempts, totalCorrect, bestStreakEver, badges);
+  state = buildState(state.totalXp, state.clearedRealms, totalAttempts, totalCorrect, bestStreakEver, badges, state.characterId);
+  persist();
+  notify();
+}
+
+/** Sets the player's chosen avatar (see `HERO_CHARACTERS` in theme.ts). Called once from onboarding, or again later if the player wants to switch. */
+export function setCharacter(characterId: string): void {
+  state = buildState(state.totalXp, state.clearedRealms, state.totalAttempts, state.totalCorrect, state.bestStreakEver, state.badges, characterId);
   persist();
   notify();
 }

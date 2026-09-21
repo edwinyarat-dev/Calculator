@@ -8,7 +8,10 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
+import { CharacterSelectModal } from './src/components/CharacterSelectModal';
 import Dashboard from './src/components/Dashboard';
+import { WelcomeModal } from './src/components/WelcomeModal';
+import { hydrateGameState, setCharacter, useGameState } from './src/utils/gameState';
 
 // Fonts are a visual nicety, not something the app should ever hang on.
 // If loading fails (or just never resolves, e.g. a blocked/slow asset host)
@@ -16,6 +19,46 @@ import Dashboard from './src/components/Dashboard';
 // spinning forever.
 const FONT_TIMEOUT_MS = 4000;
 const BG_VOID = '#0b0f19';
+
+/**
+ * A brand-new player (no `characterId` saved yet) sees a two-step
+ * onboarding: a welcome popup, then a hero-selection popup. Once a hero is
+ * picked, `characterId` is persisted and this gate never appears again —
+ * `Dashboard` renders underneath the whole time so there's no separate
+ * "loading the app" flash once onboarding finishes.
+ */
+function OnboardingGate() {
+  const hero = useGameState();
+  const [step, setStep] = useState<'welcome' | 'select' | null>(null);
+  // useGameState() returns its default (characterId: null) synchronously
+  // before AsyncStorage hydration resolves — without this guard, a
+  // returning player with a saved character would see the welcome popup
+  // flash for a frame before hydration corrects it.
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    hydrateGameState().then(() => setHydrated(true));
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (hero.characterId === null) setStep((current) => current ?? 'welcome');
+    else setStep(null);
+  }, [hydrated, hero.characterId]);
+
+  return (
+    <>
+      <WelcomeModal visible={step === 'welcome'} onContinue={() => setStep('select')} />
+      <CharacterSelectModal
+        visible={step === 'select'}
+        onSelect={(characterId) => {
+          setCharacter(characterId);
+          setStep(null);
+        }}
+      />
+    </>
+  );
+}
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -48,6 +91,7 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Dashboard />
       </ScrollView>
+      <OnboardingGate />
       <StatusBar style="light" />
     </SafeAreaView>
   );

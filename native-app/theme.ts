@@ -129,17 +129,66 @@ export const MODULES: ModuleMeta[] = [
   },
 ];
 
+export interface HeroCharacter {
+  id: string;
+  name: string;
+  emoji: string;
+  /** The in-world class/role shown as her subtitle, e.g. "Chronomancer". */
+  className: string;
+  /** One line shown on the character-select card. */
+  tagline: string;
+  purpose: string;
+}
+
 /**
- * The player's single on-screen avatar. Defined once, here, and imported
+ * The roster of playable avatars, chosen once at the start of a fresh
+ * playthrough (see `WelcomeModal`/`CharacterSelectModal`) and persisted on
+ * the Hero state (`characterId`). Defined once, here, and looked up
  * everywhere the hero is shown (the home-screen character panel, the
- * in-game battle arena) — the app previously hardcoded "Aria Vex" and her
- * emoji separately in two different files, which let them drift out of
- * sync (a different emoji gender on each screen). This is now the one
- * source of truth for her identity.
+ * in-game battle arena) via `getHeroCharacter` — this is the one source of
+ * truth for every playable identity, so no screen can drift out of sync
+ * with another.
+ *
+ * All three are original characters created for this app: no names,
+ * designs, or copyrighted likenesses borrowed from any existing show,
+ * game, or franchise. Aria Vex is the original hero this app shipped
+ * with; Zane Kestrel and Nova Quill are new alternates in the same
+ * "time-bending adventurer" world, each with a distinct RPG archetype
+ * (mage / blade / inventor) so picking one is a real, visible choice.
  */
-export const HERO_IDENTITY = {
-  name: 'Aria Vex',
-  emoji: '🧙‍♀️',
-  purpose:
-    'Aria Vex is your avatar — the "Chronomancer" whose level, XP, and title track your overall progress across every realm. Leveling her up is a scoreboard for the whole app; it never changes how any single stage is scored.',
-};
+export const HERO_CHARACTERS: HeroCharacter[] = [
+  {
+    id: 'aria',
+    name: 'Aria Vex',
+    emoji: '🧙‍♀️',
+    className: 'Chronomancer',
+    tagline: 'A calm, precise time-mage who reads the flow of numbers like a spellbook.',
+    purpose:
+      'Aria Vex is your avatar — the "Chronomancer" whose level, XP, and title track your overall progress across every realm. Leveling her up is a scoreboard for the whole app; it never changes how any single stage is scored.',
+  },
+  {
+    id: 'zane',
+    name: 'Zane Kestrel',
+    emoji: '🧝‍♂️',
+    className: 'Bladeweaver',
+    tagline: 'A swift, confident duelist who cuts straight to the right answer.',
+    purpose:
+      'Zane Kestrel is your avatar — a "Bladeweaver" who channels total focus into a single decisive strike. His level, XP, and title track your overall progress across every realm exactly like any other hero; picking him only changes how your journey looks, never how a stage is scored.',
+  },
+  {
+    id: 'nova',
+    name: 'Nova Quill',
+    emoji: '🧑‍🔬',
+    className: 'Cogwright',
+    tagline: 'A cheerful inventor who out-thinks every problem with clever contraptions.',
+    purpose:
+      'Nova Quill is your avatar — a "Cogwright" inventor who solves problems with clever contraptions instead of spellcraft. Her level, XP, and title track your overall progress across every realm exactly like any other hero; picking her only changes how your journey looks, never how a stage is scored.',
+  },
+];
+
+export const DEFAULT_HERO_CHARACTER_ID = HERO_CHARACTERS[0].id;
+
+/** Looks up a hero by id, falling back to the default (Aria) if the id is unset or unrecognized. */
+export function getHeroCharacter(id: string | null | undefined): HeroCharacter {
+  return HERO_CHARACTERS.find((c) => c.id === id) ?? HERO_CHARACTERS[0];
+}

@@ -14,7 +14,7 @@ import Animated, {
 import Svg, { Defs, LinearGradient as SvgLinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { CharacterDetailModal } from '../../components/CharacterDetailModal';
 import { useGameState } from '../../utils/gameState';
-import { HERO_IDENTITY } from '../../../theme';
+import { getHeroCharacter } from '../../../theme';
 import { ParticleBurst } from './useSuccessEffects';
 import { DL_COLORS } from './theme';
 
@@ -102,6 +102,7 @@ export function BattleStage({
   enemyImageSource,
 }: BattleStageProps) {
   const hero = useGameState();
+  const heroCharacter = getHeroCharacter(hero.characterId);
   const reducedMotion = useReducedMotion();
   const [detailOpen, setDetailOpen] = useState<'hero' | 'guardian' | null>(null);
   const heroBob = useSharedValue(0);
@@ -267,13 +268,13 @@ export function BattleStage({
           style={[styles.portraitTouchable, { left: HERO_X, top: PORTRAIT_Y }]}
           onPress={() => setDetailOpen('hero')}
           accessibilityRole="button"
-          accessibilityLabel={`View ${HERO_IDENTITY.name}'s character details`}
+          accessibilityLabel={`View ${heroCharacter.name}'s character details`}
         >
           <Animated.View style={[styles.portrait, heroStyle]}>
             {heroImageSource ? (
               <Image source={heroImageSource} style={styles.portraitImage} resizeMode="contain" />
             ) : (
-              <Text style={styles.portraitEmoji}>{HERO_IDENTITY.emoji}</Text>
+              <Text style={styles.portraitEmoji}>{heroCharacter.emoji}</Text>
             )}
             <Animated.View style={[styles.channelGlow, channelGlowStyle]} pointerEvents="none" />
           </Animated.View>
@@ -320,10 +321,10 @@ export function BattleStage({
       <CharacterDetailModal
         visible={detailOpen === 'hero'}
         onClose={() => setDetailOpen(null)}
-        emoji={HERO_IDENTITY.emoji}
-        name={HERO_IDENTITY.name}
+        emoji={heroCharacter.emoji}
+        name={heroCharacter.name}
         subtitle={`Level ${hero.level} ${hero.title}`}
-        purpose={HERO_IDENTITY.purpose}
+        purpose={heroCharacter.purpose}
         accentColor={DL_COLORS.amethyst}
       />
       <CharacterDetailModal
