@@ -131,8 +131,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   blockWrap: {
-    width: '43%',
-    minWidth: 118,
+    width: '30%',
+    minWidth: 92,
   },
   block: {
     aspectRatio: 2.3,
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   blockText: {
-    fontSize: 26,
+    fontSize: 21,
     fontWeight: '800',
     color: WOOD.text,
   },

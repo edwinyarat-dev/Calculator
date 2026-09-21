@@ -51,7 +51,7 @@ function scoreAgainst(typed: number, answer: number): number {
  * rather than pattern-match a lone number, which is the point of swapping
  * the keypad for blocks.
  */
-function generateOpOptions(a: number, b: number, op: OpSymbol, count = 4): number[] {
+function generateOpOptions(a: number, b: number, op: OpSymbol, count = 6): number[] {
   const answer = compute(a, b, op);
   const candidates = new Set<number>();
   const add = (value: number) => {
@@ -365,7 +365,7 @@ function randomStage4Problem(lastText?: string): Stage4Problem {
   return p;
 }
 
-function generateStage4Options(problem: Stage4Problem, count = 4): number[] {
+function generateStage4Options(problem: Stage4Problem, count = 6): number[] {
   const candidates = new Set<number>();
   const add = (value: number) => {
     if (value >= 0 && value !== problem.answer) candidates.add(value);
