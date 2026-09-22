@@ -39,10 +39,16 @@ function generateStage1Cases(): { values: number[] }[] {
   return Array.from({ length: 3 }, randomStage1Case);
 }
 
+const DOT_HIT_SIZE = 40;
+
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const [cases] = useState(generateStage1Cases);
   const [round, setRound] = useState(0);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
+  // The SVG below is width="100%" over a fixed viewBox, so its rendered pixel
+  // width varies by container — tracked here to place the tap-target overlay
+  // (see the comment by the Circles) at the right screen position.
+  const [renderedWidth, setRenderedWidth] = useState(NUMBER_LINE_W);
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
   const { isNearMiss } = useDeepLearning();
@@ -95,25 +101,49 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
         <Text style={styles.casePrompt}>
           Case #{round + 1}: witnesses reported these values — {caseData.values.join(', ')}. Tap the MIDDLE one (the median).
         </Text>
-        <Svg width="100%" height={130} viewBox={`0 0 ${NUMBER_LINE_W} 130`} role="img" accessibilityLabel="Number line of reported values">
-          <Line x1={PAD} y1={NUMBER_LINE_Y} x2={NUMBER_LINE_W - PAD} y2={NUMBER_LINE_Y} stroke={DL_COLORS.border} strokeWidth={2} />
-          {caseData.values.map((v, i) => {
-            const isCorrectDot = feedback !== 'idle' && v === trueMedian;
+        <View
+          style={styles.numberLineWrap}
+          onLayout={(e) => setRenderedWidth(e.nativeEvent.layout.width)}
+        >
+          <Svg width="100%" height={130} viewBox={`0 0 ${NUMBER_LINE_W} 130`} role="img" accessibilityLabel="Number line of reported values">
+            <Line x1={PAD} y1={NUMBER_LINE_Y} x2={NUMBER_LINE_W - PAD} y2={NUMBER_LINE_Y} stroke={DL_COLORS.border} strokeWidth={2} />
+            {caseData.values.map((v, i) => {
+              const isCorrectDot = feedback !== 'idle' && v === trueMedian;
+              return (
+                <Circle
+                  key={i}
+                  cx={scaleX(v)}
+                  cy={NUMBER_LINE_Y}
+                  r={14}
+                  fill={isCorrectDot ? DL_COLORS.lime : DL_COLORS.amethyst}
+                  stroke={DL_COLORS.bgDeep}
+                  strokeWidth={1.5}
+                />
+              );
+            })}
+          </Svg>
+          {/* Real tap targets live here, not on the Circles above: react-native-svg's
+              onPress on web falls back to a legacy responder shim that both spams the
+              console with "unknown event handler" warnings and is generally less
+              reliable than a plain Pressable. This overlay converts each dot's SVG
+              viewBox position to real screen pixels using the measured render width. */}
+          {caseData.values.map((v) => {
+            const pixelX = (scaleX(v) / NUMBER_LINE_W) * renderedWidth;
             return (
-              <Circle
-                key={i}
-                cx={scaleX(v)}
-                cy={NUMBER_LINE_Y}
-                r={14}
-                fill={isCorrectDot ? DL_COLORS.lime : DL_COLORS.amethyst}
-                stroke={DL_COLORS.bgDeep}
-                strokeWidth={1.5}
+              <Pressable
+                key={v}
                 onPress={() => tapValue(v)}
+                disabled={!isActive || feedback !== 'idle'}
+                accessibilityRole="button"
                 accessibilityLabel={`Value ${v}`}
+                style={[
+                  styles.dotHitTarget,
+                  { left: pixelX - DOT_HIT_SIZE / 2, top: NUMBER_LINE_Y - DOT_HIT_SIZE / 2 },
+                ]}
               />
             );
           })}
-        </Svg>
+        </View>
         {effects.isBursting && (
           <View style={styles.burstOverlay} pointerEvents="none">
             <ParticleBurst progress={effects.burstProgress} />
@@ -635,6 +665,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  numberLineWrap: {
+    width: '100%',
+    height: 130,
+  },
+  dotHitTarget: {
+    position: 'absolute',
+    width: DOT_HIT_SIZE,
+    height: DOT_HIT_SIZE,
+    borderRadius: DOT_HIT_SIZE / 2,
   },
   casePrompt: {
     fontSize: 14,
