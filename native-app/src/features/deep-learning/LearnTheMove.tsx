@@ -24,14 +24,19 @@ export interface LearnTheMoveProps {
   onDismiss: () => void;
   moduleTitle: string;
   steps: LearnTheMoveStep[];
+  /** Swaps in a different worked example from the caller's pool. Omit to hide the refresh button entirely (e.g. a walkthrough with only one example). */
+  onRefresh?: () => void;
+  /** Bump this whenever `onRefresh` picks a new example — resets the step index back to 0 so the new example starts from its own step 1, not wherever the old one left off. */
+  refreshKey?: number;
 }
 
-export function LearnTheMove({ visible, onDismiss, moduleTitle, steps }: LearnTheMoveProps) {
+export function LearnTheMove({ visible, onDismiss, moduleTitle, steps, onRefresh, refreshKey }: LearnTheMoveProps) {
   const [stepIndex, setStepIndex] = useState(0);
 
   useEffect(() => {
     if (visible) setStepIndex(0);
-  }, [visible]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, refreshKey]);
 
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
@@ -49,10 +54,17 @@ export function LearnTheMove({ visible, onDismiss, moduleTitle, steps }: LearnTh
             </Pressable>
           </View>
 
-          <View style={styles.dotsRow}>
-            {steps.map((_, i) => (
-              <View key={i} style={[styles.dot, i === stepIndex && styles.dotActive]} />
-            ))}
+          <View style={styles.dotsRefreshRow}>
+            <View style={styles.dotsRow}>
+              {steps.map((_, i) => (
+                <View key={i} style={[styles.dot, i === stepIndex && styles.dotActive]} />
+              ))}
+            </View>
+            {onRefresh && (
+              <Pressable onPress={onRefresh} accessibilityRole="button" accessibilityLabel="Show a different example" style={styles.refreshPill}>
+                <Text style={styles.refreshPillText}>🔄 New Example</Text>
+              </Pressable>
+            )}
           </View>
 
           <Text style={styles.stepTitle}>{step.title}</Text>
@@ -226,6 +238,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: DL_COLORS.textMuted,
   },
+  dotsRefreshRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
   dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -287,6 +305,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: DL_COLORS.bgDeep,
+  },
+  refreshPill: {
+    borderWidth: 1.5,
+    borderColor: DL_COLORS.amethyst,
+    backgroundColor: DL_COLORS.amethystSoft,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  refreshPillText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: DL_COLORS.amethyst,
   },
   reopenButton: {
     alignSelf: 'center',

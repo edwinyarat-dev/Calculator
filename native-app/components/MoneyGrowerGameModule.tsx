@@ -6,7 +6,7 @@ import { CoinCatch } from '../src/features/deep-learning/AnswerWidgets';
 import { useDeepLearning } from '../src/features/deep-learning/DeepLearningContext';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
 import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
-import { LearnTheMove, LearnTheMoveButton, MoneyBar } from '../src/features/deep-learning/LearnTheMove';
+import { LearnTheMove, LearnTheMoveButton, MoneyBar, type LearnTheMoveStep } from '../src/features/deep-learning/LearnTheMove';
 import { clampScore, numericOptions, randomInt, scoreAgainst, shuffle } from '../src/features/deep-learning/mathUtils';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
@@ -38,55 +38,88 @@ function generateStage1Problems(): { principal: number; ratePct: number }[] {
   return Array.from({ length: 3 }, randomStage1Problem);
 }
 
-// Fixed teaching numbers for the Stage 1 walkthrough — deliberately not
-// derived from the quiz's random problems, so the worked example never
-// previews a round's actual answer. $100 at 10% is the classic textbook
-// pair specifically because both operations land on clean whole dollars.
-const LEARN_STAGE1_STEPS = [
-  {
-    title: 'Start with your balance',
-    body: 'Say you put $100 in a savings account. That $100 is your principal — the amount you actually put in.',
-    visual: (
-      <MoneyBar
-        segments={[{ value: 100, color: DL_COLORS.amethyst, label: '$100' }]}
-        maxValue={110}
-        caption="Principal: $100"
-      />
-    ),
-  },
-  {
-    title: 'The bank adds a percentage',
-    body: 'At 10% a year, the bank pays you 10% of your $100. That’s $100 × 0.10 = $10 — the interest.',
-    visual: (
-      <MoneyBar
-        segments={[
-          { value: 100, color: DL_COLORS.amethyst, label: '$100' },
-          { value: 10, color: DL_COLORS.lime, label: '+$10' },
-        ]}
-        maxValue={110}
-        caption="$100 × 10% = $10 interest"
-      />
-    ),
-  },
-  {
-    title: 'Add it to your balance',
-    body: 'Principal plus interest is your new total: $100 + $10 = $110. That’s the whole move.',
-    visual: (
-      <MoneyBar
-        segments={[
-          { value: 100, color: DL_COLORS.amethyst, label: '$100' },
-          { value: 10, color: DL_COLORS.lime, label: '+$10' },
-        ]}
-        maxValue={110}
-        totalLabel="$110 total"
-      />
-    ),
-  },
-  {
-    title: 'One formula, every time',
-    body: 'Total = principal + (principal × rate%). Same move every round, just different numbers. Your turn.',
-  },
+// A pool of 10 worked-example scenarios for the Learn-the-Move walkthroughs —
+// deliberately not derived from the quiz's random problems (so a worked
+// example never previews a round's actual answer), and deliberately varied
+// in story, dollar amount, and rate (not just the numbers plugged into one
+// template) so refreshing actually feels like a different example, not the
+// same one restated. Every (principal, ratePct) pair is hand-picked so BOTH
+// one year's and two years' growth land on clean whole dollars.
+interface MoneyScenario {
+  story: string;
+  principal: number;
+  ratePct: number;
+}
+const MONEY_SCENARIOS: MoneyScenario[] = [
+  { story: 'a savings account', principal: 100, ratePct: 10 },
+  { story: 'a one-year CD', principal: 300, ratePct: 10 },
+  { story: "your friend's lemonade stand", principal: 50, ratePct: 20 },
+  { story: 'a rare trading card fund', principal: 400, ratePct: 25 },
+  { story: "a friend's tech startup", principal: 80, ratePct: 25 },
+  { story: 'a family trust fund', principal: 1000, ratePct: 10 },
+  { story: 'a coin-collecting fund', principal: 250, ratePct: 20 },
+  { story: 'a peer-to-peer loan', principal: 200, ratePct: 10 },
+  { story: 'a video game currency booster', principal: 40, ratePct: 50 },
+  { story: 'a vintage guitar fund', principal: 500, ratePct: 10 },
 ];
+
+function pickOtherScenarioIndex(current: number): number {
+  if (MONEY_SCENARIOS.length <= 1) return current;
+  let next = randomInt(0, MONEY_SCENARIOS.length - 1);
+  while (next === current) next = randomInt(0, MONEY_SCENARIOS.length - 1);
+  return next;
+}
+
+function buildStage1LearnSteps(scenario: MoneyScenario): LearnTheMoveStep[] {
+  const { story, principal, ratePct } = scenario;
+  const interest = Math.round((principal * ratePct) / 100);
+  const total = principal + interest;
+  return [
+    {
+      title: 'Start with your balance',
+      body: `Say you put $${principal} into ${story}. That $${principal} is your principal — the amount you actually put in.`,
+      visual: (
+        <MoneyBar
+          segments={[{ value: principal, color: DL_COLORS.amethyst, label: `$${principal}` }]}
+          maxValue={total}
+          caption={`Principal: $${principal}`}
+        />
+      ),
+    },
+    {
+      title: 'It grows by a percentage',
+      body: `At ${ratePct}% a year, it earns ${ratePct}% of $${principal}. That's $${principal} × ${ratePct / 100} = $${interest} — the interest.`,
+      visual: (
+        <MoneyBar
+          segments={[
+            { value: principal, color: DL_COLORS.amethyst, label: `$${principal}` },
+            { value: interest, color: DL_COLORS.lime, label: `+$${interest}` },
+          ]}
+          maxValue={total}
+          caption={`$${principal} × ${ratePct}% = $${interest} interest`}
+        />
+      ),
+    },
+    {
+      title: 'Add it to your balance',
+      body: `Principal plus interest is your new total: $${principal} + $${interest} = $${total}. That's the whole move.`,
+      visual: (
+        <MoneyBar
+          segments={[
+            { value: principal, color: DL_COLORS.amethyst, label: `$${principal}` },
+            { value: interest, color: DL_COLORS.lime, label: `+$${interest}` },
+          ]}
+          maxValue={total}
+          totalLabel={`$${total} total`}
+        />
+      ),
+    },
+    {
+      title: 'One formula, every time',
+      body: 'Total = principal + (principal × rate%). Same move every round, just different numbers. Your turn.',
+    },
+  ];
+}
 
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const [problems] = useState(generateStage1Problems);
@@ -94,6 +127,8 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const [showLearn, setShowLearn] = useState(true);
+  const [scenarioIndex, setScenarioIndex] = useState(() => randomInt(0, MONEY_SCENARIOS.length - 1));
+  const [refreshKey, setRefreshKey] = useState(0);
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
   const { isNearMiss } = useDeepLearning();
@@ -103,6 +138,12 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const interest = Math.round((problem.principal * problem.ratePct) / 100);
   const answer = Math.round(compoundAmount(problem.principal, problem.ratePct, 1));
   const options = React.useMemo(() => numericOptions(answer, 6, 0.15), [round]);
+  const learnSteps = React.useMemo(() => buildStage1LearnSteps(MONEY_SCENARIOS[scenarioIndex]), [scenarioIndex]);
+
+  function handleRefreshExample() {
+    setScenarioIndex((current) => pickOtherScenarioIndex(current));
+    setRefreshKey((k) => k + 1);
+  }
 
   useEffect(() => {
     finalRoundWonRef.current = false;
@@ -134,7 +175,14 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
-      <LearnTheMove visible={showLearn} onDismiss={() => setShowLearn(false)} moduleTitle="How Interest Grows Your Money" steps={LEARN_STAGE1_STEPS} />
+      <LearnTheMove
+        visible={showLearn}
+        onDismiss={() => setShowLearn(false)}
+        moduleTitle="How Interest Grows Your Money"
+        steps={learnSteps}
+        onRefresh={handleRefreshExample}
+        refreshKey={refreshKey}
+      />
       <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · a piggy bank that pays interest</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Text style={styles.promptText}>
@@ -182,63 +230,73 @@ function generateStage2Problems(): { principal: number; ratePct: number; years: 
 // that year 2 compounds off year 1's NEW balance, not the original principal.
 // The walkthrough builds straight at that misconception: it shows the wrong
 // (simple-interest) answer right next to the correct (compound) one so the
-// gap between them is the actual lesson, not an afterthought.
-const LEARN_STAGE2_STEPS = [
-  {
-    title: 'Year one grows like normal',
-    body: '$100 at 10% for one year becomes $110 — same principal-plus-interest move as before.',
-    visual: (
-      <MoneyBar
-        segments={[
-          { value: 100, color: DL_COLORS.amethyst, label: '$100' },
-          { value: 10, color: DL_COLORS.lime, label: '+$10' },
-        ]}
-        maxValue={121}
-        totalLabel="$110 after year 1"
-      />
-    ),
-  },
-  {
-    title: 'Year two grows from the NEW balance',
-    body: 'Here’s the part everyone forgets: year two’s interest is 10% of $110 — not the original $100. That’s $110 × 10% = $11.',
-    visual: (
-      <MoneyBar
-        segments={[
-          { value: 110, color: DL_COLORS.amethyst, label: '$110' },
-          { value: 11, color: DL_COLORS.lime, label: '+$11' },
-        ]}
-        maxValue={121}
-        caption="$110 × 10% = $11 more interest"
-      />
-    ),
-  },
-  {
-    title: 'That extra dollar is compounding',
-    body: 'Compound it correctly and you get $121. Forget to compound (just add $10 twice) and you’d land on $120 — wrong. That gap only grows with more years.',
-    visual: (
-      <View style={{ flexDirection: 'row', gap: 20, alignItems: 'flex-end' }}>
-        <MoneyBar
-          segments={[{ value: 120, color: DL_COLORS.danger, label: '$120' }]}
-          maxValue={121}
-          caption="❌ Simple interest (wrong)"
-        />
+// gap between them is the actual lesson, not an afterthought. Reuses
+// MONEY_SCENARIOS — every entry was hand-picked to compound cleanly for two
+// years too, not just one.
+function buildStage2LearnSteps(scenario: MoneyScenario): LearnTheMoveStep[] {
+  const { story, principal, ratePct } = scenario;
+  const year1Interest = Math.round((principal * ratePct) / 100);
+  const year1Balance = principal + year1Interest;
+  const year2Interest = Math.round((year1Balance * ratePct) / 100);
+  const year2Balance = year1Balance + year2Interest;
+  const wrongTotal = principal + 2 * year1Interest;
+  return [
+    {
+      title: 'Year one grows like normal',
+      body: `$${principal} into ${story} at ${ratePct}% for one year becomes $${year1Balance} — same principal-plus-interest move as before.`,
+      visual: (
         <MoneyBar
           segments={[
-            { value: 110, color: DL_COLORS.amethyst, label: '$110' },
-            { value: 11, color: DL_COLORS.lime, label: '+$11' },
+            { value: principal, color: DL_COLORS.amethyst, label: `$${principal}` },
+            { value: year1Interest, color: DL_COLORS.lime, label: `+$${year1Interest}` },
           ]}
-          maxValue={121}
-          totalLabel="$121"
-          caption="✅ Compound interest (right)"
+          maxValue={year2Balance}
+          totalLabel={`$${year1Balance} after year 1`}
         />
-      </View>
-    ),
-  },
-  {
-    title: 'The rule',
-    body: 'Every year, grow from LAST year’s balance — never the original principal. Your turn.',
-  },
-];
+      ),
+    },
+    {
+      title: 'Year two grows from the NEW balance',
+      body: `Here's the part everyone forgets: year two's interest is ${ratePct}% of $${year1Balance} — not the original $${principal}. That's $${year1Balance} × ${ratePct}% = $${year2Interest}.`,
+      visual: (
+        <MoneyBar
+          segments={[
+            { value: year1Balance, color: DL_COLORS.amethyst, label: `$${year1Balance}` },
+            { value: year2Interest, color: DL_COLORS.lime, label: `+$${year2Interest}` },
+          ]}
+          maxValue={year2Balance}
+          caption={`$${year1Balance} × ${ratePct}% = $${year2Interest} more interest`}
+        />
+      ),
+    },
+    {
+      title: 'That extra bit is compounding',
+      body: `Compound it correctly and you get $${year2Balance}. Forget to compound (just add $${year1Interest} twice) and you'd land on $${wrongTotal} — wrong. That gap only grows with more years.`,
+      visual: (
+        <View style={{ flexDirection: 'row', gap: 20, alignItems: 'flex-end' }}>
+          <MoneyBar
+            segments={[{ value: wrongTotal, color: DL_COLORS.danger, label: `$${wrongTotal}` }]}
+            maxValue={year2Balance}
+            caption="❌ Simple interest (wrong)"
+          />
+          <MoneyBar
+            segments={[
+              { value: year1Balance, color: DL_COLORS.amethyst, label: `$${year1Balance}` },
+              { value: year2Interest, color: DL_COLORS.lime, label: `+$${year2Interest}` },
+            ]}
+            maxValue={year2Balance}
+            totalLabel={`$${year2Balance}`}
+            caption="✅ Compound interest (right)"
+          />
+        </View>
+      ),
+    },
+    {
+      title: 'The rule',
+      body: "Every year, grow from LAST year's balance — never the original principal. Your turn.",
+    },
+  ];
+}
 
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [problems] = useState(generateStage2Problems);
@@ -246,6 +304,8 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const [showLearn, setShowLearn] = useState(true);
+  const [scenarioIndex, setScenarioIndex] = useState(() => randomInt(0, MONEY_SCENARIOS.length - 1));
+  const [refreshKey, setRefreshKey] = useState(0);
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
   const { isNearMiss } = useDeepLearning();
@@ -255,6 +315,12 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const year1Balance = Math.round(compoundAmount(problem.principal, problem.ratePct, 1));
   const answer = Math.round(compoundAmount(problem.principal, problem.ratePct, problem.years));
   const options = React.useMemo(() => numericOptions(answer, 6, 0.15), [round]);
+  const learnSteps = React.useMemo(() => buildStage2LearnSteps(MONEY_SCENARIOS[scenarioIndex]), [scenarioIndex]);
+
+  function handleRefreshExample() {
+    setScenarioIndex((current) => pickOtherScenarioIndex(current));
+    setRefreshKey((k) => k + 1);
+  }
 
   useEffect(() => {
     finalRoundWonRef.current = false;
@@ -286,7 +352,14 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
-      <LearnTheMove visible={showLearn} onDismiss={() => setShowLearn(false)} moduleTitle="Why Compounding Beats Simple Interest" steps={LEARN_STAGE2_STEPS} />
+      <LearnTheMove
+        visible={showLearn}
+        onDismiss={() => setShowLearn(false)}
+        moduleTitle="Why Compounding Beats Simple Interest"
+        steps={learnSteps}
+        onRefresh={handleRefreshExample}
+        refreshKey={refreshKey}
+      />
       <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · the balance compounds every year</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Text style={styles.promptText}>
