@@ -1,12 +1,13 @@
-import { Gem, Hourglass } from 'lucide-react-native';
+import { Gem, Hourglass, Store as StoreIcon } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { MODULES, ModuleKey } from '../../theme';
 import { DL_COLORS } from '../features/deep-learning/theme';
 import { useGameState } from '../utils/gameState';
 import { CharacterProfileCard } from './CharacterProfileCard';
 import { KineticStage } from './KineticStage';
 import { RealmViewport } from './RealmViewport';
+import { StoreModal } from './StoreModal';
 
 // Picks the next realm to jump to after clearing one: the next module after
 // the current one in the fixed MODULES order, skipping any already cleared,
@@ -44,6 +45,7 @@ function AmbientGlow() {
 
 function HudHeader() {
   const hero = useGameState();
+  const [showStore, setShowStore] = useState(false);
   return (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
@@ -55,11 +57,22 @@ function HudHeader() {
           <Text style={styles.subtitle}>Chronomancer</Text>
         </View>
       </View>
-      <View style={styles.shardsPill}>
-        <Gem size={16} color={DL_COLORS.amethyst} strokeWidth={2.2} />
-        <Text style={styles.shardsValue}>{hero.totalXp.toLocaleString()}</Text>
-        <Text style={styles.shardsLabel}>Chrono-Shards</Text>
+      <View style={styles.headerRight}>
+        <View style={styles.shardsPill}>
+          <Gem size={16} color={DL_COLORS.amethyst} strokeWidth={2.2} />
+          <Text style={styles.shardsValue}>{hero.totalXp.toLocaleString()}</Text>
+          <Text style={styles.shardsLabel}>Chrono-Shards</Text>
+        </View>
+        <Pressable
+          onPress={() => setShowStore(true)}
+          style={styles.storeButton}
+          accessibilityRole="button"
+          accessibilityLabel="Open the Chrono Shop"
+        >
+          <StoreIcon size={18} color={DL_COLORS.reward} strokeWidth={2.2} />
+        </Pressable>
       </View>
+      <StoreModal visible={showStore} onClose={() => setShowStore(false)} chronoShards={hero.totalXp} />
     </View>
   );
 }
@@ -174,6 +187,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 3,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   shardsPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -184,6 +202,16 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 16,
     paddingVertical: 8,
+  },
+  storeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: DL_COLORS.reward,
+    backgroundColor: 'rgba(232, 121, 249, 0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   shardsValue: {
     fontSize: 14,

@@ -10,7 +10,7 @@ export interface CharacterSelectModalProps {
 
 /**
  * The second onboarding popup — shown right after `WelcomeModal`. Lets a
- * new player pick which of the three original heroes represents them for
+ * new player pick which of the two original heroes represents them for
  * the rest of the app (portrait, name, and flavor text everywhere the hero
  * is shown). The pick only changes cosmetics/identity: level, XP, streaks,
  * and every stage's scoring are completely unaffected by which hero is
