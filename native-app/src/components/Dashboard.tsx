@@ -1,11 +1,12 @@
-import { Gem, Hourglass, Store as StoreIcon } from 'lucide-react-native';
+import { Gem, Hourglass, Store as StoreIcon, User } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { MODULES, ModuleKey } from '../../theme';
+import { getHeroCharacter, MODULES, ModuleKey } from '../../theme';
 import { DL_COLORS } from '../features/deep-learning/theme';
 import { useGameState } from '../utils/gameState';
 import { CharacterProfileCard } from './CharacterProfileCard';
 import { KineticStage } from './KineticStage';
+import { ProfileModal } from './ProfileModal';
 import { RealmViewport } from './RealmViewport';
 import { StoreModal } from './StoreModal';
 
@@ -45,7 +46,9 @@ function AmbientGlow() {
 
 function HudHeader() {
   const hero = useGameState();
+  const heroCharacter = getHeroCharacter(hero.characterId);
   const [showStore, setShowStore] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   return (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
@@ -64,6 +67,14 @@ function HudHeader() {
           <Text style={styles.shardsLabel}>Chrono-Shards</Text>
         </View>
         <Pressable
+          onPress={() => setShowProfile(true)}
+          style={styles.profileButton}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${heroCharacter.name}'s profile`}
+        >
+          <Text style={styles.profileButtonEmoji}>{heroCharacter.emoji}</Text>
+        </Pressable>
+        <Pressable
           onPress={() => setShowStore(true)}
           style={styles.storeButton}
           accessibilityRole="button"
@@ -72,6 +83,7 @@ function HudHeader() {
           <StoreIcon size={18} color={DL_COLORS.reward} strokeWidth={2.2} />
         </Pressable>
       </View>
+      <ProfileModal visible={showProfile} onClose={() => setShowProfile(false)} />
       <StoreModal visible={showStore} onClose={() => setShowStore(false)} chronoShards={hero.totalXp} />
     </View>
   );
@@ -202,6 +214,19 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 16,
     paddingVertical: 8,
+  },
+  profileButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: DL_COLORS.amethyst,
+    backgroundColor: DL_COLORS.amethystSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileButtonEmoji: {
+    fontSize: 17,
   },
   storeButton: {
     width: 36,
