@@ -5,7 +5,9 @@ import ReAnimated from 'react-native-reanimated';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
 import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
+import { LearnTheMove, LearnTheMoveButton, type LearnTheMoveStep } from '../src/features/deep-learning/LearnTheMove';
 import { clampScore, randomInt } from '../src/features/deep-learning/mathUtils';
+import { UnitCircleVisual } from '../src/features/deep-learning/TrigVisuals';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
 import { ParticleBurst, useSuccessEffects } from '../src/features/deep-learning/useSuccessEffects';
@@ -188,13 +190,63 @@ function generateStage2Target(): number {
   return Math.round((0.25 + Math.random() * 0.6) * 100) / 100;
 }
 
+// The lesson: Stage 2's live canvas already SHOWS sine and cosine as the
+// vertical/horizontal projections of a rotating dot — but nothing ever says
+// why, before the slider assumes you already know it. The walkthrough
+// builds the definition up piece by piece (the circle itself, then cosine
+// alone, then sine added on top) instead of showing both projections at
+// once, so each one reads as its own idea rather than a diagram to
+// memorize. The angle pool is the standard reference angles trig courses
+// actually anchor to, not arbitrary numbers.
+const TRIG_ANGLES = [20, 30, 45, 60, 70, 110, 135, 160];
+
+function pickOtherAngleIndex(current: number): number {
+  if (TRIG_ANGLES.length <= 1) return current;
+  let next = randomInt(0, TRIG_ANGLES.length - 1);
+  while (next === current) next = randomInt(0, TRIG_ANGLES.length - 1);
+  return next;
+}
+
+function buildTrigLearnSteps(angleDeg: number): LearnTheMoveStep[] {
+  return [
+    {
+      title: 'The unit circle is a compass',
+      body: `Angles are measured counterclockwise from the right (0°). The circle's radius is always 1 — that's what makes it a UNIT circle. Here's the dot at ${angleDeg}°.`,
+      visual: <UnitCircleVisual angleDeg={angleDeg} caption="Just a dot on the circle, for now." />,
+    },
+    {
+      title: 'Cosine = how far right',
+      body: `Drop straight down to the horizontal axis. That distance from center — how far right or left the dot sits — is cos(θ).`,
+      visual: <UnitCircleVisual angleDeg={angleDeg} showCos caption="The purple line: the dot's horizontal position." />,
+    },
+    {
+      title: 'Sine = how far up',
+      body: `Now the vertical drop: how far up or down the dot sits is sin(θ). Together, the two lines pinpoint the dot exactly.`,
+      visual: <UnitCircleVisual angleDeg={angleDeg} showCos showSin caption="Purple = cosine, lime = sine." />,
+    },
+    {
+      title: 'That’s the whole slider',
+      body: 'Drag the angle in this stage and you’re just spinning that same dot — cos(θ) and sin(θ) are wherever it lands. Your turn.',
+    },
+  ];
+}
+
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [sinTarget] = useState(generateStage2Target);
   const [liveAngle, setLiveAngle] = useState(0);
   const [holdProgress, setHoldProgress] = useState(0);
+  const [showLearn, setShowLearn] = useState(true);
+  const [angleIndex, setAngleIndex] = useState(() => randomInt(0, TRIG_ANGLES.length - 1));
+  const [refreshKey, setRefreshKey] = useState(0);
   const holdStartRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const effects = useSuccessEffects();
+  const learnSteps = React.useMemo(() => buildTrigLearnSteps(TRIG_ANGLES[angleIndex]), [angleIndex]);
+
+  function handleRefreshExample() {
+    setAngleIndex((current) => pickOtherAngleIndex(current));
+    setRefreshKey((k) => k + 1);
+  }
 
   const rad = toRad(liveAngle);
   const sinValue = Math.sin(rad);
@@ -254,6 +306,14 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
+      <LearnTheMove
+        visible={showLearn}
+        onDismiss={() => setShowLearn(false)}
+        moduleTitle="The Unit Circle"
+        steps={learnSteps}
+        onRefresh={handleRefreshExample}
+        refreshKey={refreshKey}
+      />
       <Text style={styles.stageObjective}>Stop the vector where Sine (Y) = {sinTarget.toFixed(2)}</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Svg width="100%" height={UNIT_CIRCLE_SIZE} viewBox={`0 0 ${UNIT_CIRCLE_SIZE} ${UNIT_CIRCLE_SIZE}`} role="img" accessibilityLabel="Unit circle">
@@ -290,6 +350,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
           <Text style={[styles.readoutValue, { color: DL_COLORS.amethyst }]}>{cosValue.toFixed(3)}</Text>
         </View>
       </View>
+      <LearnTheMoveButton onPress={() => setShowLearn(true)} />
 
       <Slider
         style={styles.slider}
