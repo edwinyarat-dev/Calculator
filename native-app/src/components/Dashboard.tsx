@@ -1,13 +1,14 @@
-import { Gem, Hourglass, Store as StoreIcon, User } from 'lucide-react-native';
+import { Gem, Hourglass, RotateCcw, Store as StoreIcon, User } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { getHeroCharacter, MODULES, ModuleKey } from '../../theme';
 import { DL_COLORS } from '../features/deep-learning/theme';
-import { useGameState } from '../utils/gameState';
+import { resetGameState, useGameState } from '../utils/gameState';
 import { CharacterProfileCard } from './CharacterProfileCard';
 import { KineticStage } from './KineticStage';
 import { ProfileModal } from './ProfileModal';
 import { RealmViewport } from './RealmViewport';
+import { RestartConfirmModal } from './RestartConfirmModal';
 import { StoreModal } from './StoreModal';
 
 // Picks the next realm to jump to after clearing one: the next module after
@@ -44,11 +45,19 @@ function AmbientGlow() {
   );
 }
 
-function HudHeader() {
+function HudHeader({ onRestart }: { onRestart: () => void }) {
   const hero = useGameState();
   const heroCharacter = getHeroCharacter(hero.characterId);
   const [showStore, setShowStore] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+
+  function handleConfirmRestart() {
+    resetGameState();
+    setShowRestartConfirm(false);
+    onRestart();
+  }
+
   return (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
@@ -82,9 +91,22 @@ function HudHeader() {
         >
           <StoreIcon size={18} color={DL_COLORS.reward} strokeWidth={2.2} />
         </Pressable>
+        <Pressable
+          onPress={() => setShowRestartConfirm(true)}
+          style={styles.restartButton}
+          accessibilityRole="button"
+          accessibilityLabel="Restart MathQuest, clearing all progress"
+        >
+          <RotateCcw size={16} color={DL_COLORS.danger} strokeWidth={2.2} />
+        </Pressable>
       </View>
       <ProfileModal visible={showProfile} onClose={() => setShowProfile(false)} />
       <StoreModal visible={showStore} onClose={() => setShowStore(false)} chronoShards={hero.totalXp} />
+      <RestartConfirmModal
+        visible={showRestartConfirm}
+        onCancel={() => setShowRestartConfirm(false)}
+        onConfirm={handleConfirmRestart}
+      />
     </View>
   );
 }
@@ -93,24 +115,36 @@ export default function Dashboard() {
   const { width } = useWindowDimensions();
   const isWide = width >= SIDEBAR_BREAKPOINT;
   const [activeRealm, setActiveRealm] = useState<ModuleKey>('arithmetic');
+  // Bumped by the Restart button so KineticStage force-remounts whichever
+  // realm is on screen — every realm's stage progress and randomized
+  // problem set live entirely in that component's local state (see
+  // MoneyGrowerGameModule's own playthrough/key pattern), so a fresh mount
+  // is what actually clears stages and regenerates new questions, not just
+  // wiping the persisted Hero record.
+  const [resetToken, setResetToken] = useState(0);
   const hero = useGameState();
 
   function handleNextRealm() {
     setActiveRealm((current) => pickNextRealm(current, hero.clearedRealms));
   }
 
+  function handleRestart() {
+    setActiveRealm('arithmetic');
+    setResetToken((t) => t + 1);
+  }
+
   return (
     <View style={styles.root}>
       <AmbientGlow />
       <View style={styles.content}>
-        <HudHeader />
+        <HudHeader onRestart={handleRestart} />
         <View style={[styles.grid, isWide ? styles.gridRow : styles.gridColumn]}>
           <View style={isWide ? styles.profileColWide : styles.profileColNarrow}>
             <CharacterProfileCard />
           </View>
           <View style={styles.workspaceCol}>
             <RealmViewport activeRealm={activeRealm} onSelectRealm={setActiveRealm} />
-            <KineticStage activeRealm={activeRealm} onNextRealm={handleNextRealm} />
+            <KineticStage activeRealm={activeRealm} onNextRealm={handleNextRealm} resetToken={resetToken} />
           </View>
         </View>
       </View>
@@ -235,6 +269,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: DL_COLORS.reward,
     backgroundColor: 'rgba(232, 121, 249, 0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  restartButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: DL_COLORS.danger,
+    backgroundColor: DL_COLORS.dangerSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },

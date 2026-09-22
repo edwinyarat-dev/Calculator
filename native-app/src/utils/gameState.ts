@@ -230,8 +230,9 @@ export function setCharacter(characterId: string): void {
   notify();
 }
 
+/** Wipes every piece of progress (XP, level, cleared realms, lifetime stats, badges) back to a fresh save — but keeps the player's chosen hero, since picking one again isn't "progress" to reset. */
 export function resetGameState(): void {
-  state = buildState(0, []);
+  state = buildState(0, [], 0, 0, 0, [], state.characterId);
   persist();
   notify();
 }

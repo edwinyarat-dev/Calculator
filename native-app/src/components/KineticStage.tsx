@@ -12,6 +12,10 @@ export interface KineticStageProps {
   activeRealm: ModuleKey;
   /** Forwarded into the active module's "Continue to Next Realm" button on its realm-complete screen. */
   onNextRealm?: () => void;
+  /** Bumped by the Restart button — changes the mounted module's `key`, force-remounting it so its
+   * stage progress resets to Stage 1 and every `useState(generateStageX...)` lazy initializer reruns,
+   * producing a brand new randomized question set instead of reusing whatever was already on screen. */
+  resetToken?: number;
 }
 
 // Every realm runs the same 4-stage deep-learning engine (see
@@ -25,12 +29,12 @@ const REALM_COMPONENTS: Record<ModuleKey, React.ComponentType<{ onNextRealm?: ()
 };
 
 /** The active game viewport — renders whichever realm the player has selected in the RealmViewport. */
-export function KineticStage({ activeRealm, onNextRealm }: KineticStageProps) {
+export function KineticStage({ activeRealm, onNextRealm, resetToken = 0 }: KineticStageProps) {
   const ActiveModule = REALM_COMPONENTS[activeRealm];
 
   return (
     <View style={styles.frame}>
-      <ActiveModule onNextRealm={onNextRealm} />
+      <ActiveModule key={`${activeRealm}-${resetToken}`} onNextRealm={onNextRealm} />
     </View>
   );
 }
