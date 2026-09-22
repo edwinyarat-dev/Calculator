@@ -50,6 +50,41 @@ function angleToPoint(angleDeg: number) {
   };
 }
 
+// A pool of worked-example angles for Stage 1's Learn-the-Move — fixed
+// numbers, never the quiz's randomized targets (same convention as every
+// other realm's walkthrough). Stage 2 assumes the player already knows what
+// "degrees" even measures before it ever mentions sine or cosine — this is
+// the one place that actually teaches it: an angle is just a turn amount
+// from flat, and this realm's whole dial lives between 0° (flat) and 90°
+// (straight up).
+const STAGE1_LEARN_ANGLES = [20, 35, 50, 65, 75, 28, 42, 58];
+
+function pickOtherStage1Angle(current: number): number {
+  if (STAGE1_LEARN_ANGLES.length <= 1) return current;
+  let next = STAGE1_LEARN_ANGLES[randomInt(0, STAGE1_LEARN_ANGLES.length - 1)];
+  while (next === current) next = STAGE1_LEARN_ANGLES[randomInt(0, STAGE1_LEARN_ANGLES.length - 1)];
+  return next;
+}
+
+function buildStage1LearnSteps(angleDeg: number): LearnTheMoveStep[] {
+  return [
+    {
+      title: 'An angle is just a turn amount',
+      body: `Starting flat along the bottom (0°), the arm sweeps up as you turn it. ${angleDeg}° means you've turned this far from flat — bigger number, further turn.`,
+      visual: <UnitCircleVisual angleDeg={angleDeg} caption={`${angleDeg}° — partway between flat and straight up`} />,
+    },
+    {
+      title: '90° points straight up',
+      body: 'A quarter turn — pointing straight up — is 90°. Every target in this realm’s dial lives between those two: 0° (flat) and 90° (straight up).',
+      visual: <UnitCircleVisual angleDeg={90} caption="90° — a quarter turn, straight up" />,
+    },
+    {
+      title: 'Match it, then hold',
+      body: 'Drag the slider until the arm lines up with the target angle shown above the dial, then hold it steady for a second to lock it in.',
+    },
+  ];
+}
+
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const [targets] = useState(generateStage1Targets);
   const [round, setRound] = useState(0);
@@ -61,6 +96,15 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   // slider release can both fire in quick succession for the same attempt.
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
+  const [showLearn, setShowLearn] = useState(true);
+  const [learnAngle, setLearnAngle] = useState(() => STAGE1_LEARN_ANGLES[randomInt(0, STAGE1_LEARN_ANGLES.length - 1)]);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const learnSteps = React.useMemo(() => buildStage1LearnSteps(learnAngle), [learnAngle]);
+
+  function handleRefreshExample() {
+    setLearnAngle((current) => pickOtherStage1Angle(current));
+    setRefreshKey((k) => k + 1);
+  }
 
   const isFinalRound = round === targets.length - 1;
   const target = targets[round];
@@ -121,6 +165,14 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
+      <LearnTheMove
+        visible={showLearn}
+        onDismiss={() => setShowLearn(false)}
+        moduleTitle="What an Angle Measures"
+        steps={learnSteps}
+        onRefresh={handleRefreshExample}
+        refreshKey={refreshKey}
+      />
       <Text style={styles.stageObjective}>Target: {target}° · Round {round + 1} of {targets.length}</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Svg width="100%" height={CANVAS_SIZE} viewBox={`0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`} role="img" accessibilityLabel="Angle matching triangle">
@@ -169,6 +221,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
         thumbTintColor={withinTolerance ? DL_COLORS.lime : DL_COLORS.amethyst}
         accessibilityLabel="Angle slider"
       />
+      <LearnTheMoveButton onPress={() => setShowLearn(true)} />
       <HintExplanationPanel hint={`Drag the slider until the arm lines up with the dashed target, then hold it steady within ±${STAGE1_TOLERANCE}° for 1.5s.`} feedback="idle" />
     </View>
   );

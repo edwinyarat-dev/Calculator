@@ -29,6 +29,61 @@ function generateStage1Rooms(): { width: number; height: number }[] {
   return Array.from({ length: 3 }, () => ({ width: randomInt(4, 11), height: randomInt(3, 9) }));
 }
 
+// A pool of worked-example blueprints for Stage 1's Learn-the-Move —
+// deliberately separate from the quiz's own randomized rooms (see the same
+// convention in Money Grower) so a worked example never previews a round's
+// actual target. The lesson teaches what the sliders are even doing before
+// asking the player to do it blind: a rectangle is just two numbers, and the
+// dashed outline on the canvas is those two numbers drawn out.
+interface BlueprintScenario {
+  story: string;
+  width: number;
+  height: number;
+}
+const BLUEPRINT_SCENARIOS: BlueprintScenario[] = [
+  { story: 'a bedroom addition', width: 6, height: 4 },
+  { story: 'a home office', width: 8, height: 5 },
+  { story: 'a garden shed', width: 5, height: 5 },
+  { story: 'a walk-in closet', width: 4, height: 3 },
+  { story: 'a sunroom', width: 9, height: 6 },
+  { story: 'a garage bay', width: 10, height: 7 },
+  { story: 'a reading nook', width: 3, height: 4 },
+  { story: 'a pool house', width: 7, height: 5 },
+];
+
+function pickOtherBlueprintScenarioIndex(current: number): number {
+  if (BLUEPRINT_SCENARIOS.length <= 1) return current;
+  let next = randomInt(0, BLUEPRINT_SCENARIOS.length - 1);
+  while (next === current) next = randomInt(0, BLUEPRINT_SCENARIOS.length - 1);
+  return next;
+}
+
+function buildStage1LearnSteps(scenario: BlueprintScenario): LearnTheMoveStep[] {
+  const { story, width, height } = scenario;
+  return [
+    {
+      title: 'A rectangle is just two numbers',
+      body: `Every blueprint room has a width (side to side) and a height (top to bottom). This one is for ${story}: ${width} wide, ${height} tall.`,
+      visual: (
+        <PerimeterTrace
+          shape="rectangle"
+          sides={[width, height]}
+          edgeLabels={[String(width), String(height), String(width), String(height)]}
+          totalLabel={`${width} wide × ${height} tall`}
+        />
+      ),
+    },
+    {
+      title: 'The dashed box is your target',
+      body: `On the canvas, the dashed outline is that exact ${width}×${height} blueprint. Drag the Width slider until your solid box matches it side to side, then Height until it matches top to bottom.`,
+    },
+    {
+      title: 'Hold it steady to lock it in',
+      body: 'Once both sliders land inside the target zone, the box turns green. Hold it there for a second to lock in the match and move to the next blueprint.',
+    },
+  ];
+}
+
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const [rooms] = useState(generateStage1Rooms);
   const [round, setRound] = useState(0);
@@ -39,6 +94,15 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const rafRef = useRef<number | null>(null);
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
+  const [showLearn, setShowLearn] = useState(true);
+  const [scenarioIndex, setScenarioIndex] = useState(() => randomInt(0, BLUEPRINT_SCENARIOS.length - 1));
+  const [refreshKey, setRefreshKey] = useState(0);
+  const learnSteps = React.useMemo(() => buildStage1LearnSteps(BLUEPRINT_SCENARIOS[scenarioIndex]), [scenarioIndex]);
+
+  function handleRefreshExample() {
+    setScenarioIndex((current) => pickOtherBlueprintScenarioIndex(current));
+    setRefreshKey((k) => k + 1);
+  }
 
   const isFinalRound = round === rooms.length - 1;
   const target = rooms[round];
@@ -100,6 +164,14 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
+      <LearnTheMove
+        visible={showLearn}
+        onDismiss={() => setShowLearn(false)}
+        moduleTitle="Reading a Blueprint"
+        steps={learnSteps}
+        onRefresh={handleRefreshExample}
+        refreshKey={refreshKey}
+      />
       <Text style={styles.stageObjective}>
         Round {round + 1} of {rooms.length} · blueprint calls for a {target.width}×{target.height} room
       </Text>
@@ -168,6 +240,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
         thumbTintColor={withinTolerance ? DL_COLORS.lime : DL_COLORS.amethyst}
         accessibilityLabel="Room height"
       />
+      <LearnTheMoveButton onPress={() => setShowLearn(true)} />
       <HintExplanationPanel hint="Drag both sliders until the solid room lines up with the dashed blueprint, then hold it steady." feedback="idle" />
     </View>
   );

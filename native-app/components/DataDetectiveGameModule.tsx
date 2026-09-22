@@ -43,6 +43,61 @@ function generateStage1Cases(): { values: number[] }[] {
 
 const DOT_HIT_SIZE = 40;
 
+// A pool of worked-example witness lists for Stage 1's Learn-the-Move —
+// separate from the quiz's own randomized cases (same convention as every
+// other realm's walkthrough) so a worked example never previews a round's
+// actual answer. The lesson teaches the one trick this stage actually tests:
+// the median isn't whichever number you hear third, it's whichever number
+// SITS third once everything is sorted — an order, not a calculation.
+interface SuspectScenario {
+  story: string;
+  values: number[];
+}
+const SUSPECT_SCENARIOS: SuspectScenario[] = [
+  { story: 'five witnesses clocked the getaway car (mph)', values: [42, 58, 35, 61, 47] },
+  { story: 'five neighbors heard the alarm go off (seconds after midnight)', values: [15, 40, 8, 52, 27] },
+  { story: 'five security cameras logged the intruder’s height (inches)', values: [68, 61, 74, 65, 70] },
+  { story: 'five informants gave a price for the stolen jewels ($1,000s)', values: [12, 30, 7, 45, 21] },
+  { story: 'five patrol logs recorded response time (minutes)', values: [9, 4, 14, 6, 11] },
+  { story: 'five pawn shops reported the item’s resale value ($100s)', values: [22, 9, 35, 15, 28] },
+  { story: 'five witnesses guessed the suspect’s age', values: [33, 45, 27, 52, 38] },
+  { story: 'five tip lines logged the ransom call’s length (seconds)', values: [50, 22, 68, 35, 44] },
+];
+
+function pickOtherSuspectScenarioIndex(current: number): number {
+  if (SUSPECT_SCENARIOS.length <= 1) return current;
+  let next = randomInt(0, SUSPECT_SCENARIOS.length - 1);
+  while (next === current) next = randomInt(0, SUSPECT_SCENARIOS.length - 1);
+  return next;
+}
+
+function buildStage1LearnSteps(scenario: SuspectScenario): LearnTheMoveStep[] {
+  const { story, values } = scenario;
+  const sorted = [...values].sort((a, b) => a - b);
+  return [
+    {
+      title: 'First, sort what you hear',
+      body: `Reports come in whatever order witnesses remember, not in order of size. ${story}: ${values.join(', ')}. Before you can find the middle, line them up small to large.`,
+    },
+    {
+      title: 'The middle one, once sorted',
+      body: 'Sorted low to high, the one sitting dead center is the median. With 5 reports, that’s the 3rd number in line — no math, just order.',
+      visual: (
+        <SortedLineup
+          reported={values}
+          sorted={sorted}
+          isMiddle={(i) => i === 2}
+          medianLabel={`Median = ${sorted[2]}`}
+        />
+      ),
+    },
+    {
+      title: 'Tap the dot, not the number',
+      body: 'On the number line, that middle value is just a dot’s position. Tap whichever dot sits in the center — regardless of which value it turns out to be.',
+    },
+  ];
+}
+
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const [cases] = useState(generateStage1Cases);
   const [round, setRound] = useState(0);
@@ -54,6 +109,15 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
   const { isNearMiss } = useDeepLearning();
+  const [showLearn, setShowLearn] = useState(true);
+  const [scenarioIndex, setScenarioIndex] = useState(() => randomInt(0, SUSPECT_SCENARIOS.length - 1));
+  const [refreshKey, setRefreshKey] = useState(0);
+  const learnSteps = React.useMemo(() => buildStage1LearnSteps(SUSPECT_SCENARIOS[scenarioIndex]), [scenarioIndex]);
+
+  function handleRefreshExample() {
+    setScenarioIndex((current) => pickOtherSuspectScenarioIndex(current));
+    setRefreshKey((k) => k + 1);
+  }
 
   const isFinalRound = round === cases.length - 1;
   const caseData = cases[round];
@@ -98,6 +162,14 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
+      <LearnTheMove
+        visible={showLearn}
+        onDismiss={() => setShowLearn(false)}
+        moduleTitle="Spot the Middle Suspect"
+        steps={learnSteps}
+        onRefresh={handleRefreshExample}
+        refreshKey={refreshKey}
+      />
       <Text style={styles.stageObjective}>Round {round + 1} of {cases.length}</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Text style={styles.casePrompt}>
@@ -152,6 +224,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
           </View>
         )}
       </ReAnimated.View>
+      {feedback === 'idle' && <LearnTheMoveButton onPress={() => setShowLearn(true)} />}
       <HintExplanationPanel
         hint="Sort the values in your head first, then tap the one right in the middle."
         explanation={feedback !== 'idle' ? `Sorted: ${sortedValues.join(', ')}. The middle value is ${trueMedian}.` : null}
