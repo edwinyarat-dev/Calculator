@@ -6,6 +6,7 @@ import { CoinCatch } from '../src/features/deep-learning/AnswerWidgets';
 import { useDeepLearning } from '../src/features/deep-learning/DeepLearningContext';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
 import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
+import { LearnTheMove, LearnTheMoveButton, MoneyBar } from '../src/features/deep-learning/LearnTheMove';
 import { clampScore, numericOptions, randomInt, scoreAgainst, shuffle } from '../src/features/deep-learning/mathUtils';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
@@ -37,11 +38,62 @@ function generateStage1Problems(): { principal: number; ratePct: number }[] {
   return Array.from({ length: 3 }, randomStage1Problem);
 }
 
+// Fixed teaching numbers for the Stage 1 walkthrough — deliberately not
+// derived from the quiz's random problems, so the worked example never
+// previews a round's actual answer. $100 at 10% is the classic textbook
+// pair specifically because both operations land on clean whole dollars.
+const LEARN_STAGE1_STEPS = [
+  {
+    title: 'Start with your balance',
+    body: 'Say you put $100 in a savings account. That $100 is your principal — the amount you actually put in.',
+    visual: (
+      <MoneyBar
+        segments={[{ value: 100, color: DL_COLORS.amethyst, label: '$100' }]}
+        maxValue={110}
+        caption="Principal: $100"
+      />
+    ),
+  },
+  {
+    title: 'The bank adds a percentage',
+    body: 'At 10% a year, the bank pays you 10% of your $100. That’s $100 × 0.10 = $10 — the interest.',
+    visual: (
+      <MoneyBar
+        segments={[
+          { value: 100, color: DL_COLORS.amethyst, label: '$100' },
+          { value: 10, color: DL_COLORS.lime, label: '+$10' },
+        ]}
+        maxValue={110}
+        caption="$100 × 10% = $10 interest"
+      />
+    ),
+  },
+  {
+    title: 'Add it to your balance',
+    body: 'Principal plus interest is your new total: $100 + $10 = $110. That’s the whole move.',
+    visual: (
+      <MoneyBar
+        segments={[
+          { value: 100, color: DL_COLORS.amethyst, label: '$100' },
+          { value: 10, color: DL_COLORS.lime, label: '+$10' },
+        ]}
+        maxValue={110}
+        totalLabel="$110 total"
+      />
+    ),
+  },
+  {
+    title: 'One formula, every time',
+    body: 'Total = principal + (principal × rate%). Same move every round, just different numbers. Your turn.',
+  },
+];
+
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const [problems] = useState(generateStage1Problems);
   const [round, setRound] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
+  const [showLearn, setShowLearn] = useState(true);
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
   const { isNearMiss } = useDeepLearning();
@@ -82,6 +134,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
+      <LearnTheMove visible={showLearn} onDismiss={() => setShowLearn(false)} moduleTitle="How Interest Grows Your Money" steps={LEARN_STAGE1_STEPS} />
       <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · a piggy bank that pays interest</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Text style={styles.promptText}>
@@ -94,6 +147,7 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
         )}
       </ReAnimated.View>
       <CoinCatch options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} prefix="$" />
+      {feedback === 'idle' && <LearnTheMoveButton onPress={() => setShowLearn(true)} />}
       <HintExplanationPanel
         hint={`Multiply $${problem.principal} by ${problem.ratePct}% to get the interest, then add it to $${problem.principal}.`}
         explanation={feedback !== 'idle' ? `$${problem.principal} × ${problem.ratePct}% = $${interest} interest. $${problem.principal} + $${interest} = $${answer}.` : null}
@@ -124,11 +178,74 @@ function generateStage2Problems(): { principal: number; ratePct: number; years: 
   return Array.from({ length: 3 }, randomStage2Problem);
 }
 
+// This stage's near-miss message already flags the #1 mistake here — forgetting
+// that year 2 compounds off year 1's NEW balance, not the original principal.
+// The walkthrough builds straight at that misconception: it shows the wrong
+// (simple-interest) answer right next to the correct (compound) one so the
+// gap between them is the actual lesson, not an afterthought.
+const LEARN_STAGE2_STEPS = [
+  {
+    title: 'Year one grows like normal',
+    body: '$100 at 10% for one year becomes $110 — same principal-plus-interest move as before.',
+    visual: (
+      <MoneyBar
+        segments={[
+          { value: 100, color: DL_COLORS.amethyst, label: '$100' },
+          { value: 10, color: DL_COLORS.lime, label: '+$10' },
+        ]}
+        maxValue={121}
+        totalLabel="$110 after year 1"
+      />
+    ),
+  },
+  {
+    title: 'Year two grows from the NEW balance',
+    body: 'Here’s the part everyone forgets: year two’s interest is 10% of $110 — not the original $100. That’s $110 × 10% = $11.',
+    visual: (
+      <MoneyBar
+        segments={[
+          { value: 110, color: DL_COLORS.amethyst, label: '$110' },
+          { value: 11, color: DL_COLORS.lime, label: '+$11' },
+        ]}
+        maxValue={121}
+        caption="$110 × 10% = $11 more interest"
+      />
+    ),
+  },
+  {
+    title: 'That extra dollar is compounding',
+    body: 'Compound it correctly and you get $121. Forget to compound (just add $10 twice) and you’d land on $120 — wrong. That gap only grows with more years.',
+    visual: (
+      <View style={{ flexDirection: 'row', gap: 20, alignItems: 'flex-end' }}>
+        <MoneyBar
+          segments={[{ value: 120, color: DL_COLORS.danger, label: '$120' }]}
+          maxValue={121}
+          caption="❌ Simple interest (wrong)"
+        />
+        <MoneyBar
+          segments={[
+            { value: 110, color: DL_COLORS.amethyst, label: '$110' },
+            { value: 11, color: DL_COLORS.lime, label: '+$11' },
+          ]}
+          maxValue={121}
+          totalLabel="$121"
+          caption="✅ Compound interest (right)"
+        />
+      </View>
+    ),
+  },
+  {
+    title: 'The rule',
+    body: 'Every year, grow from LAST year’s balance — never the original principal. Your turn.',
+  },
+];
+
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [problems] = useState(generateStage2Problems);
   const [round, setRound] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
+  const [showLearn, setShowLearn] = useState(true);
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
   const { isNearMiss } = useDeepLearning();
@@ -169,6 +286,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
+      <LearnTheMove visible={showLearn} onDismiss={() => setShowLearn(false)} moduleTitle="Why Compounding Beats Simple Interest" steps={LEARN_STAGE2_STEPS} />
       <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · the balance compounds every year</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Text style={styles.promptText}>
@@ -181,6 +299,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         )}
       </ReAnimated.View>
       <CoinCatch options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} prefix="$" />
+      {feedback === 'idle' && <LearnTheMoveButton onPress={() => setShowLearn(true)} />}
       <HintExplanationPanel
         hint="Each year grows from LAST year's balance, not the original amount — compound it one year at a time."
         explanation={
