@@ -177,30 +177,36 @@ export function CalculatorPopover() {
             </View>
 
             <View style={styles.grid}>
-              <CalcKey label="C" kind="clear" onPress={clearAll} accessibilityLabel="Clear" />
-              <CalcKey label="⌫" kind="func" onPress={backspace} accessibilityLabel="Backspace" />
-              <CalcKey label="%" kind="func" onPress={percent} accessibilityLabel="Percent" />
-              <CalcKey label="÷" kind="operator" onPress={() => setOperator('÷')} accessibilityLabel="Divide" />
-
-              <CalcKey label="7" onPress={() => inputDigit('7')} />
-              <CalcKey label="8" onPress={() => inputDigit('8')} />
-              <CalcKey label="9" onPress={() => inputDigit('9')} />
-              <CalcKey label="×" kind="operator" onPress={() => setOperator('×')} accessibilityLabel="Multiply" />
-
-              <CalcKey label="4" onPress={() => inputDigit('4')} />
-              <CalcKey label="5" onPress={() => inputDigit('5')} />
-              <CalcKey label="6" onPress={() => inputDigit('6')} />
-              <CalcKey label="−" kind="operator" onPress={() => setOperator('−')} accessibilityLabel="Subtract" />
-
-              <CalcKey label="1" onPress={() => inputDigit('1')} />
-              <CalcKey label="2" onPress={() => inputDigit('2')} />
-              <CalcKey label="3" onPress={() => inputDigit('3')} />
-              <CalcKey label="+" kind="operator" onPress={() => setOperator('+')} accessibilityLabel="Add" />
-
-              <CalcKey label="±" kind="func" onPress={toggleSign} accessibilityLabel="Toggle sign" />
-              <CalcKey label="0" onPress={() => inputDigit('0')} />
-              <CalcKey label="." onPress={inputDecimal} accessibilityLabel="Decimal point" />
-              <CalcKey label="=" kind="equals" onPress={evaluate} accessibilityLabel="Equals" />
+              <View style={styles.row}>
+                <CalcKey label="C" kind="clear" onPress={clearAll} accessibilityLabel="Clear" />
+                <CalcKey label="⌫" kind="func" onPress={backspace} accessibilityLabel="Backspace" />
+                <CalcKey label="%" kind="func" onPress={percent} accessibilityLabel="Percent" />
+                <CalcKey label="÷" kind="operator" onPress={() => setOperator('÷')} accessibilityLabel="Divide" />
+              </View>
+              <View style={styles.row}>
+                <CalcKey label="7" onPress={() => inputDigit('7')} />
+                <CalcKey label="8" onPress={() => inputDigit('8')} />
+                <CalcKey label="9" onPress={() => inputDigit('9')} />
+                <CalcKey label="×" kind="operator" onPress={() => setOperator('×')} accessibilityLabel="Multiply" />
+              </View>
+              <View style={styles.row}>
+                <CalcKey label="4" onPress={() => inputDigit('4')} />
+                <CalcKey label="5" onPress={() => inputDigit('5')} />
+                <CalcKey label="6" onPress={() => inputDigit('6')} />
+                <CalcKey label="−" kind="operator" onPress={() => setOperator('−')} accessibilityLabel="Subtract" />
+              </View>
+              <View style={styles.row}>
+                <CalcKey label="1" onPress={() => inputDigit('1')} />
+                <CalcKey label="2" onPress={() => inputDigit('2')} />
+                <CalcKey label="3" onPress={() => inputDigit('3')} />
+                <CalcKey label="+" kind="operator" onPress={() => setOperator('+')} accessibilityLabel="Add" />
+              </View>
+              <View style={styles.row}>
+                <CalcKey label="±" kind="func" onPress={toggleSign} accessibilityLabel="Toggle sign" />
+                <CalcKey label="0" onPress={() => inputDigit('0')} />
+                <CalcKey label="." onPress={inputDecimal} accessibilityLabel="Decimal point" />
+                <CalcKey label="=" kind="equals" onPress={evaluate} accessibilityLabel="Equals" />
+              </View>
             </View>
           </Pressable>
         </Pressable>
@@ -211,7 +217,6 @@ export function CalculatorPopover() {
 
 export default CalculatorPopover;
 
-const KEY_SIZE = 56;
 const KEY_GAP = 8;
 
 const styles = StyleSheet.create({
@@ -233,8 +238,8 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   card: {
-    width: KEY_SIZE * 4 + KEY_GAP * 3 + 40,
-    maxWidth: '100%',
+    width: '100%',
+    maxWidth: 320,
     backgroundColor: DL_COLORS.surface,
     borderWidth: 2,
     borderColor: DL_COLORS.sky,
@@ -295,13 +300,15 @@ const styles = StyleSheet.create({
     color: DL_COLORS.text,
   },
   grid: {
+    gap: KEY_GAP,
+  },
+  row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: KEY_GAP,
   },
   key: {
-    width: KEY_SIZE,
-    height: KEY_SIZE,
+    flex: 1,
+    aspectRatio: 1,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
