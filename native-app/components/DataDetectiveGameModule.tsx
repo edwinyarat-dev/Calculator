@@ -7,6 +7,8 @@ import { useDeepLearning } from '../src/features/deep-learning/DeepLearningConte
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
 import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
 import { EvidenceLineup } from '../src/features/deep-learning/AnswerWidgets';
+import { LearnTheMove, LearnTheMoveButton, type LearnTheMoveStep } from '../src/features/deep-learning/LearnTheMove';
+import { MeanLevel, SortedLineup, TallyBoard } from '../src/features/deep-learning/StatsVisuals';
 import { clampScore, numericOptions, randomInt, scoreAgainst, shuffle } from '../src/features/deep-learning/mathUtils';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
@@ -245,11 +247,94 @@ function generateStage2Cases(): CaseFile[] {
   return [randomMeanCase(), randomMedianCase(), randomModeCase()];
 }
 
+// The lesson: this stage's own near-miss message already names the real
+// mistake — "double-check which measure of the data you were asked for."
+// Mean, median, and mode are three genuinely different operations on the
+// same list, so the walkthrough gives each its own case-board visual (level
+// bars, sorted lineup, tally board) rather than one chart with three labels,
+// then closes by naming the actual trap: same data, three different
+// questions, so misreading which one is asked is the whole mistake.
+interface StatsScenario {
+  meanValues: number[];
+  medianValues: number[];
+  modeValues: number[];
+}
+const STATS_SCENARIOS: StatsScenario[] = [
+  { meanValues: [12, 18, 24, 15, 21, 18], medianValues: [4, 9, 11, 13, 17, 22], modeValues: [7, 7, 7, 3, 9, 5] },
+  { meanValues: [8, 14, 20, 11, 17, 14], medianValues: [2, 6, 8, 14, 18, 24], modeValues: [4, 4, 4, 8, 2, 6] },
+  { meanValues: [30, 25, 35, 28, 32, 30], medianValues: [5, 7, 10, 16, 19, 23], modeValues: [9, 9, 9, 3, 5, 7] },
+  { meanValues: [6, 9, 12, 15, 18, 12], medianValues: [3, 8, 9, 15, 20, 25], modeValues: [6, 6, 6, 2, 8, 4] },
+  { meanValues: [40, 35, 45, 38, 42, 40], medianValues: [1, 5, 12, 18, 21, 27], modeValues: [10, 10, 10, 4, 6, 8] },
+  { meanValues: [5, 10, 15, 20, 25, 15], medianValues: [6, 10, 13, 17, 22, 28], modeValues: [3, 3, 3, 7, 9, 5] },
+];
+
+function pickOtherStatsScenarioIndex(current: number): number {
+  if (STATS_SCENARIOS.length <= 1) return current;
+  let next = randomInt(0, STATS_SCENARIOS.length - 1);
+  while (next === current) next = randomInt(0, STATS_SCENARIOS.length - 1);
+  return next;
+}
+
+function buildStatsLearnSteps(scenario: StatsScenario): LearnTheMoveStep[] {
+  const { meanValues, medianValues, modeValues } = scenario;
+  const meanTotal = meanValues.reduce((s, v) => s + v, 0);
+  const meanValue = meanTotal / meanValues.length;
+
+  const medianStats = computeStats(medianValues)!;
+  const sortedMedian = [...medianValues].sort((a, b) => a - b);
+  const midLo = medianStats.n / 2 - 1;
+  const midHi = medianStats.n / 2;
+
+  const freq = new Map<number, number>();
+  modeValues.forEach((v) => freq.set(v, (freq.get(v) ?? 0) + 1));
+  const modeCounts = [...freq.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => a.value - b.value);
+  const modeValue = modeCounts.reduce((best, c) => (c.count > best.count ? c : best), modeCounts[0]).value;
+  const modeCount = freq.get(modeValue)!;
+
+  return [
+    {
+      title: 'Mean = spread it evenly',
+      body: `Add every value, divide by how many there are. That's the level all ${meanValues.length} would sit at if you evened them out.`,
+      visual: (
+        <MeanLevel
+          values={meanValues}
+          meanValue={meanValue}
+          totalLabel={`(${meanValues.join('+')}) ÷ ${meanValues.length} = ${meanValue}`}
+        />
+      ),
+    },
+    {
+      title: 'Median = sort first, then look',
+      body: `Median isn't a calculation — it's an order. Sort everything, then find the middle. With an EVEN count, average the two in the middle.`,
+      visual: (
+        <SortedLineup
+          reported={medianValues}
+          sorted={sortedMedian}
+          isMiddle={(i) => i === midLo || i === midHi}
+          medianLabel={`${sortedMedian[midLo]} and ${sortedMedian[midHi]} → median = ${medianStats.median}`}
+        />
+      ),
+    },
+    {
+      title: 'Mode = just count',
+      body: `Mode needs no math at all — it's whichever value shows up most often. Longest bar wins.`,
+      visual: <TallyBoard counts={modeCounts} modeValue={modeValue} modeLabel={`${modeValue} appears ${modeCount} times — that's the mode`} />,
+    },
+    {
+      title: 'Same data, three questions',
+      body: 'The same 6 numbers give three different answers depending which one you\'re asked for. Before you answer, check: MEAN, MEDIAN, or MODE?',
+    },
+  ];
+}
+
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [cases] = useState(generateStage2Cases);
   const [round, setRound] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
+  const [showLearn, setShowLearn] = useState(true);
+  const [scenarioIndex, setScenarioIndex] = useState(() => randomInt(0, STATS_SCENARIOS.length - 1));
+  const [refreshKey, setRefreshKey] = useState(0);
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
   const { isNearMiss } = useDeepLearning();
@@ -258,6 +343,12 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const problem = cases[round];
   const answer = problem.answer;
   const options = React.useMemo(() => numericOptions(answer, 6, 0.25), [round]);
+  const learnSteps = React.useMemo(() => buildStatsLearnSteps(STATS_SCENARIOS[scenarioIndex]), [scenarioIndex]);
+
+  function handleRefreshExample() {
+    setScenarioIndex((current) => pickOtherStatsScenarioIndex(current));
+    setRefreshKey((k) => k + 1);
+  }
 
   useEffect(() => {
     finalRoundWonRef.current = false;
@@ -289,6 +380,14 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
+      <LearnTheMove
+        visible={showLearn}
+        onDismiss={() => setShowLearn(false)}
+        moduleTitle="Mean, Median & Mode"
+        steps={learnSteps}
+        onRefresh={handleRefreshExample}
+        refreshKey={refreshKey}
+      />
       <Text style={styles.stageObjective}>Round {round + 1} of {cases.length} · case files</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Text style={styles.casePrompt}>{problem.prompt}</Text>
@@ -299,6 +398,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         )}
       </ReAnimated.View>
       <EvidenceLineup options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} />
+      {feedback === 'idle' && <LearnTheMoveButton onPress={() => setShowLearn(true)} />}
       <HintExplanationPanel
         hint={problem.hint}
         explanation={feedback !== 'idle' ? problem.explanation : null}
