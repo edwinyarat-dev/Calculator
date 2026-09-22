@@ -7,7 +7,7 @@ import {
 } from '@expo-google-fonts/nunito';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
 import { CharacterSelectModal } from './src/components/CharacterSelectModal';
 import Dashboard from './src/components/Dashboard';
 import { WelcomeModal } from './src/components/WelcomeModal';
@@ -60,7 +60,36 @@ function OnboardingGate() {
   );
 }
 
+// Several stages (Circle Spinner's holds, Limit Chaser's holds, every tap
+// widget in AnswerWidgets.tsx) are built around press-and-hold or fast
+// repeated taps. On web, React Native's own components don't disable text
+// selection or the mobile tap-highlight box the way native platforms do by
+// default, so those same gestures can leave a lingering browser text
+// selection or a flashed highlight rectangle behind — cosmetic, but not
+// something a real game screen should ever show. Injected once, globally,
+// rather than per-component, since it's a browser-chrome concern, not a
+// per-widget one.
+function useDisableWebSelectionArtifacts() {
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const style = document.createElement('style');
+    style.textContent = `
+      * {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+}
+
 export default function App() {
+  useDisableWebSelectionArtifacts();
   const [fontsLoaded, fontError] = useFonts({
     Fredoka_600SemiBold,
     Fredoka_700Bold,
