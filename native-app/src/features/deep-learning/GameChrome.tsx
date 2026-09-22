@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { awardXP, markRealmCleared, recordRunStats, useGameState } from '../../utils/gameState';
-import { getHeroCharacter, MODULES } from '../../../theme';
+import { MODULES } from '../../../theme';
 import { BattlePulseProvider } from './BattlePulseContext';
 import { BattleStage } from './BattleStage';
 import { DeepLearningProvider, useDeepLearning } from './DeepLearningContext';
@@ -10,82 +9,11 @@ import LevelSelector from './LevelSelector';
 import { DL_COLORS } from './theme';
 import type { MathStageConfig } from './types';
 
-const MAX_HP = 100;
-const MAX_MP = 100;
-
-// Shared chrome around every 4-stage math module: the XP bar + streak badge,
-// the encouragement-shield near-miss banner, and the stage-cleared banner.
-// Pulled out of the first module (Trigonometry) once it became clear every
-// subsequent module (Arithmetic, Geometry, …) would need the exact same
-// shell around its own stage components.
-
-function VitalBar({
-  label,
-  value,
-  max,
-  colorFrom,
-  colorTo,
-  trackColor,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  colorFrom: string;
-  colorTo: string;
-  trackColor: string;
-}) {
-  const pct = Math.max(0, Math.min(100, (value / max) * 100));
-  const gradientId = `vitalGradient-${label}`;
-  return (
-    <View style={styles.vitalRow}>
-      <Text style={styles.vitalLabel}>{label}</Text>
-      <View style={[styles.vitalTrack, { backgroundColor: trackColor }]}>
-        <View style={[styles.vitalFillWrap, { width: `${pct}%` }]}>
-          <Svg width={220} height="100%" style={StyleSheet.absoluteFill}>
-            <Defs>
-              <LinearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
-                <Stop offset="0%" stopColor={colorFrom} />
-                <Stop offset="100%" stopColor={colorTo} />
-              </LinearGradient>
-            </Defs>
-            <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${gradientId})`} />
-          </Svg>
-        </View>
-      </View>
-      <Text style={styles.vitalValue}>
-        {Math.round(value)}/{max}
-      </Text>
-    </View>
-  );
-}
-
-/** The Top HUD Profile Bay: character identity plus HP (neon green), MP (blue), and this
- * playthrough's XP (purple) — a cosmetic layer mirroring v0's own self-healing HP/MP
- * mechanic exactly (a miss docks HP with a random hit and auto-revives at 0; a win tops
- * up MP, capped) so it never touches the real stage scoring or win conditions underneath. */
-function HeroVitalsBay({ hp, mp, xpEarned, maxXp, streakCount }: { hp: number; mp: number; xpEarned: number; maxXp: number; streakCount: number }) {
-  const hero = useGameState();
-  const heroCharacter = getHeroCharacter(hero.characterId);
-  const isHot = streakCount >= 3;
-
-  return (
-    <View style={styles.hudBay}>
-      <View style={styles.hudIdentityRow}>
-        <Text style={styles.hudIdentity}>
-          Lv {hero.level} {hero.title} · {heroCharacter.name}
-        </Text>
-        {streakCount > 0 && (
-          <View style={[styles.streakBadge, isHot && styles.streakBadgeHot]}>
-            <Text style={styles.streakText}>{isHot ? '🔥' : '✦'} {streakCount}x streak</Text>
-          </View>
-        )}
-      </View>
-      <VitalBar label="HP" value={hp} max={MAX_HP} colorFrom="#34D399" colorTo={DL_COLORS.lime} trackColor="rgba(52, 211, 153, 0.14)" />
-      <VitalBar label="MP" value={mp} max={MAX_MP} colorFrom={DL_COLORS.sky} colorTo="#6366F1" trackColor={DL_COLORS.skySoft} />
-      <VitalBar label="XP" value={xpEarned} max={maxXp} colorFrom={DL_COLORS.amethyst} colorTo="#E879F9" trackColor={DL_COLORS.amethystSoft} />
-    </View>
-  );
-}
+// Shared chrome around every 4-stage math module: the encouragement-shield
+// near-miss banner and the stage-cleared banner. Pulled out of the first
+// module (Trigonometry) once it became clear every subsequent module
+// (Arithmetic, Geometry, …) would need the exact same shell around its own
+// stage components.
 
 /** The Bottom Magic Deck: a consistent spellcaster-console section around whichever
  * interactive widget the active stage renders (sliders, taps, holds, keypad) — the
@@ -309,7 +237,6 @@ function GameInner({
     lastResult,
     resultToken,
     isNearMiss,
-    streakCount,
     xpEarned,
     wasCrit,
     totalAttempts,
@@ -320,11 +247,8 @@ function GameInner({
   } = useDeepLearning();
   const [showBanner, setShowBanner] = useState(false);
   const [lastXpGain, setLastXpGain] = useState(0);
-  const [hp, setHp] = useState(MAX_HP);
-  const [mp, setMp] = useState(40);
   const [pulseToken, setPulseToken] = useState(0);
   const prevXpRef = useRef(0);
-  const isFirstResult = useRef(true);
   // Set once, the moment a clear pushes hero.clearedRealms to cover every module —
   // captured from `hero` as it stood just *before* this clear (see the effect
   // below), so replaying an already-fully-cleared realm later never re-fires it.
@@ -361,30 +285,6 @@ function GameInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastResult, activeStageIndex]);
 
-  // Top HUD's HP/MP: a cosmetic layer that mirrors v0's own mechanic exactly —
-  // a miss docks HP with a random hit (skipped for an encouraging near-miss),
-  // a win tops up MP, both capped/floored and self-healing. This never reads
-  // from or writes to the real stage scoring above.
-  useEffect(() => {
-    if (isFirstResult.current) {
-      isFirstResult.current = false;
-      return;
-    }
-    if (lastResult === 'won') {
-      setMp((m) => Math.min(MAX_MP, m + 18));
-    } else if (lastResult === 'lost' && !isNearMiss) {
-      const dmg = 12 + Math.floor(Math.random() * 10);
-      setHp((h) => Math.max(0, h - dmg));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resultToken]);
-
-  useEffect(() => {
-    if (hp > 0) return;
-    const timer = setTimeout(() => setHp(MAX_HP), 700);
-    return () => clearTimeout(timer);
-  }, [hp]);
-
   function handleContinue() {
     setShowBanner(false);
     if (!isFinalStage) {
@@ -403,7 +303,6 @@ function GameInner({
 
   return (
     <View style={styles.gameContainer}>
-      <HeroVitalsBay hp={hp} mp={mp} xpEarned={xpEarned} maxXp={maxXp} streakCount={streakCount} />
       <LevelSelector stages={stages} activeStageIndex={activeStageIndex} unlockedStages={unlockedStages} onSelectStage={goToStage} />
       <BattlePulseProvider value={pulse}>
         <View style={styles.combatFrame}>
@@ -494,56 +393,6 @@ const styles = StyleSheet.create({
     padding: 14,
     paddingBottom: 32,
   },
-  hudBay: {
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: DL_COLORS.border,
-    backgroundColor: DL_COLORS.surface,
-    padding: 12,
-    marginBottom: 10,
-    gap: 6,
-  },
-  hudIdentityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 2,
-  },
-  hudIdentity: {
-    fontSize: 12.5,
-    fontWeight: '800',
-    color: DL_COLORS.text,
-  },
-  vitalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  vitalLabel: {
-    width: 26,
-    fontSize: 10.5,
-    fontWeight: '800',
-    color: DL_COLORS.textMuted,
-    textTransform: 'uppercase',
-  },
-  vitalTrack: {
-    flex: 1,
-    height: 9,
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
-  vitalFillWrap: {
-    height: '100%',
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
-  vitalValue: {
-    width: 54,
-    fontSize: 10.5,
-    fontWeight: '800',
-    color: DL_COLORS.text,
-    textAlign: 'right',
-  },
   combatFrame: {
     borderRadius: 20,
     borderWidth: 2,
@@ -580,26 +429,6 @@ const styles = StyleSheet.create({
     color: DL_COLORS.sky,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
-  },
-  streakBadge: {
-    alignSelf: 'flex-start',
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: DL_COLORS.surfaceMuted,
-  },
-  streakBadgeHot: {
-    backgroundColor: DL_COLORS.limeSoft,
-    shadowColor: DL_COLORS.lime,
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  streakText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: DL_COLORS.lime,
   },
   stageTitle: {
     fontSize: 18,
