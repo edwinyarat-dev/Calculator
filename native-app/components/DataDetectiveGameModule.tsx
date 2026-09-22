@@ -6,8 +6,8 @@ import Svg, { Circle, Line } from 'react-native-svg';
 import { useDeepLearning } from '../src/features/deep-learning/DeepLearningContext';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
 import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
-import { clampScore, randomInt, scoreAgainst, shuffle } from '../src/features/deep-learning/mathUtils';
-import { EntryDisplay, NumericKeypad } from '../src/features/deep-learning/NumericKeypad';
+import { EvidenceLineup } from '../src/features/deep-learning/AnswerWidgets';
+import { clampScore, numericOptions, randomInt, scoreAgainst, shuffle } from '../src/features/deep-learning/mathUtils';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
 import { ParticleBurst, useSuccessEffects } from '../src/features/deep-learning/useSuccessEffects';
@@ -248,7 +248,7 @@ function generateStage2Cases(): CaseFile[] {
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [cases] = useState(generateStage2Cases);
   const [round, setRound] = useState(0);
-  const [entry, setEntry] = useState('');
+  const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
@@ -257,25 +257,17 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const isFinalRound = round === cases.length - 1;
   const problem = cases[round];
   const answer = problem.answer;
+  const options = React.useMemo(() => numericOptions(answer, 6, 0.25), [round]);
 
   useEffect(() => {
     finalRoundWonRef.current = false;
-    setEntry('');
+    setSelected(null);
     setFeedback('idle');
   }, [round]);
 
-  function pressDigit(d: string) {
-    if (!isActive || entry.length >= 3) return;
-    setEntry((e) => e + d);
-  }
-  function backspace() {
-    if (!isActive) return;
-    setEntry((e) => e.slice(0, -1));
-  }
-
-  function submit() {
-    if (!isActive || entry === '') return;
-    const value = Number(entry);
+  function handleSelect(value: number) {
+    if (!isActive || feedback !== 'idle') return;
+    setSelected(value);
     if (value === answer) {
       setFeedback('correct');
       effects.trigger();
@@ -283,15 +275,15 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         finalRoundWonRef.current = true;
         onCommit(1);
       } else {
-        setRound((r) => r + 1);
+        setTimeout(() => setRound((r) => r + 1), 650);
       }
     } else {
       setFeedback('wrong');
       if (isFinalRound) onCommit(scoreAgainst(value, answer));
       setTimeout(() => {
-        setEntry('');
+        setSelected(null);
         setFeedback('idle');
-      }, 500);
+      }, 1200);
     }
   }
 
@@ -299,14 +291,14 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>Round {round + 1} of {cases.length} · case files</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
-        <EntryDisplay prompt={problem.prompt} entry={entry} feedback={feedback} />
+        <Text style={styles.casePrompt}>{problem.prompt}</Text>
         {effects.isBursting && (
           <View style={styles.burstOverlay} pointerEvents="none">
             <ParticleBurst progress={effects.burstProgress} />
           </View>
         )}
       </ReAnimated.View>
-      <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
+      <EvidenceLineup options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} />
       <HintExplanationPanel
         hint={problem.hint}
         explanation={feedback !== 'idle' ? problem.explanation : null}
@@ -624,7 +616,7 @@ function buildDataDetectiveStages(): MathStageConfig[] {
   ];
 }
 
-export default function DataDetectiveGameModule() {
+export default function DataDetectiveGameModule({ onNextRealm }: { onNextRealm?: () => void }) {
   const [playthrough, setPlaythrough] = useState(0);
   const stages = React.useMemo(buildDataDetectiveStages, [playthrough]);
   return (
@@ -634,6 +626,7 @@ export default function DataDetectiveGameModule() {
       maxXp={220}
       realmId="statistics"
       onRestart={() => setPlaythrough((p) => p + 1)}
+      onNextRealm={onNextRealm}
     />
   );
 }

@@ -6,8 +6,8 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { useDeepLearning } from '../src/features/deep-learning/DeepLearningContext';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
 import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
-import { clampScore, randomInt } from '../src/features/deep-learning/mathUtils';
-import { EntryDisplay, NumericKeypad } from '../src/features/deep-learning/NumericKeypad';
+import { ScrollingReel } from '../src/features/deep-learning/AnswerWidgets';
+import { clampScore, numericOptions, randomInt } from '../src/features/deep-learning/mathUtils';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
 import { ParticleBurst, useSuccessEffects } from '../src/features/deep-learning/useSuccessEffects';
@@ -202,7 +202,7 @@ function generateStage2Problems(): { t: number; h: number; prompt: string }[] {
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [problems] = useState(generateStage2Problems);
   const [round, setRound] = useState(0);
-  const [entry, setEntry] = useState('');
+  const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
@@ -213,25 +213,17 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const heightAtT = f(problem.t);
   const heightAtEnd = f(problem.t + problem.h);
   const answer = Math.round(avgVelocity(problem.t, problem.h));
+  const options = React.useMemo(() => numericOptions(answer, 6, 0.3), [round]);
 
   useEffect(() => {
     finalRoundWonRef.current = false;
-    setEntry('');
+    setSelected(null);
     setFeedback('idle');
   }, [round]);
 
-  function pressDigit(d: string) {
-    if (!isActive || entry.length >= 3) return;
-    setEntry((e) => e + d);
-  }
-  function backspace() {
-    if (!isActive) return;
-    setEntry((e) => e.slice(0, -1));
-  }
-
-  function submit() {
-    if (!isActive || entry === '') return;
-    const value = Number(entry);
+  function handleSelect(value: number) {
+    if (!isActive || feedback !== 'idle') return;
+    setSelected(value);
     if (value === answer) {
       setFeedback('correct');
       effects.trigger();
@@ -239,15 +231,15 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         finalRoundWonRef.current = true;
         onCommit(1);
       } else {
-        setRound((r) => r + 1);
+        setTimeout(() => setRound((r) => r + 1), 900);
       }
     } else {
       setFeedback('wrong');
       if (isFinalRound) onCommit(clampScore(1 - Math.abs(value - answer) / Math.max(1, Math.abs(answer))));
       setTimeout(() => {
-        setEntry('');
+        setSelected(null);
         setFeedback('idle');
-      }, 500);
+      }, 1400);
     }
   }
 
@@ -255,14 +247,14 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · average speed = distance ÷ time</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
-        <EntryDisplay prompt={problem.prompt} entry={entry} feedback={feedback} />
+        <Text style={styles.reportLabel}>{problem.prompt}</Text>
         {effects.isBursting && (
           <View style={styles.burstOverlay} pointerEvents="none">
             <ParticleBurst progress={effects.burstProgress} />
           </View>
         )}
       </ReAnimated.View>
-      <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
+      <ScrollingReel options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} resetKey={round} />
       <HintExplanationPanel
         hint="Average speed = (height at the later time − height at the earlier time) ÷ time elapsed."
         explanation={
@@ -548,7 +540,7 @@ function buildLimitChaserStages(): MathStageConfig[] {
   ];
 }
 
-export default function LimitChaserGameModule() {
+export default function LimitChaserGameModule({ onNextRealm }: { onNextRealm?: () => void }) {
   const [playthrough, setPlaythrough] = useState(0);
   const stages = React.useMemo(buildLimitChaserStages, [playthrough]);
   return (
@@ -558,6 +550,7 @@ export default function LimitChaserGameModule() {
       maxXp={220}
       realmId="calculus"
       onRestart={() => setPlaythrough((p) => p + 1)}
+      onNextRealm={onNextRealm}
     />
   );
 }

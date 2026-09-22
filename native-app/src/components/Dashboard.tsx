@@ -1,12 +1,27 @@
 import { Gem, Hourglass } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { ModuleKey } from '../../theme';
+import { MODULES, ModuleKey } from '../../theme';
 import { DL_COLORS } from '../features/deep-learning/theme';
 import { useGameState } from '../utils/gameState';
 import { CharacterProfileCard } from './CharacterProfileCard';
 import { KineticStage } from './KineticStage';
 import { RealmViewport } from './RealmViewport';
+
+// Picks the next realm to jump to after clearing one: the next module after
+// the current one in the fixed MODULES order, skipping any already cleared,
+// wrapping back around to the start. Realms are never locked (see the
+// RealmViewport comment), so "next" just means "the next thing worth doing" —
+// if every realm is already cleared, it falls back to the following one in
+// order so "Continue" still goes somewhere for a post-finale replay.
+function pickNextRealm(current: ModuleKey, clearedRealms: string[]): ModuleKey {
+  const currentIndex = MODULES.findIndex((mod) => mod.key === current);
+  for (let step = 1; step <= MODULES.length; step++) {
+    const candidate = MODULES[(currentIndex + step) % MODULES.length];
+    if (!clearedRealms.includes(candidate.key)) return candidate.key;
+  }
+  return MODULES[(currentIndex + 1) % MODULES.length].key;
+}
 
 // Matches the v0-designed "MathQuest / Chronomancer" HUD layout, rebuilt in
 // React Native: a top bar with a Chrono-Shards counter, then a responsive
@@ -53,6 +68,11 @@ export default function Dashboard() {
   const { width } = useWindowDimensions();
   const isWide = width >= SIDEBAR_BREAKPOINT;
   const [activeRealm, setActiveRealm] = useState<ModuleKey>('arithmetic');
+  const hero = useGameState();
+
+  function handleNextRealm() {
+    setActiveRealm((current) => pickNextRealm(current, hero.clearedRealms));
+  }
 
   return (
     <View style={styles.root}>
@@ -65,7 +85,7 @@ export default function Dashboard() {
           </View>
           <View style={styles.workspaceCol}>
             <RealmViewport activeRealm={activeRealm} onSelectRealm={setActiveRealm} />
-            <KineticStage activeRealm={activeRealm} />
+            <KineticStage activeRealm={activeRealm} onNextRealm={handleNextRealm} />
           </View>
         </View>
       </View>

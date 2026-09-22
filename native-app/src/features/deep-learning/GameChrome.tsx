@@ -196,6 +196,8 @@ export function RealmCompleteModal({
   bestStreakEver,
   skillsPracticed,
   onPlayAgain,
+  onNextRealm,
+  isFinale,
 }: {
   visible: boolean;
   realmTitle: string;
@@ -208,6 +210,10 @@ export function RealmCompleteModal({
   bestStreakEver: number;
   skillsPracticed: string[];
   onPlayAgain: () => void;
+  /** Advances to the next not-yet-cleared realm and closes this modal. Omitted (no button shown) when there's nothing left to advance to — see `isFinale`. */
+  onNextRealm?: () => void;
+  /** True the moment this clear makes every realm cleared — swaps the normal "Realm Complete!" copy for a one-time victory screen and hides "Continue to Next Realm" (there is nowhere left to go). */
+  isFinale?: boolean;
 }) {
   const mistakes = Math.max(0, totalAttempts - totalCorrect - totalNearMisses);
   const accuracyPct = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 100;
@@ -215,11 +221,15 @@ export function RealmCompleteModal({
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onPlayAgain}>
       <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
-          <Text style={styles.modalEmoji}>{realmEmoji} 🏆</Text>
-          <Text style={styles.modalTitle}>Realm Complete!</Text>
+        <View style={[styles.modalCard, isFinale && styles.modalCardFinale]}>
+          <Text style={styles.modalEmoji}>{isFinale ? '⏳✨' : `${realmEmoji} 🏆`}</Text>
+          <Text style={[styles.modalTitle, isFinale && styles.modalTitleFinale]}>
+            {isFinale ? 'Time Is Whole Again' : 'Realm Complete!'}
+          </Text>
           <Text style={styles.modalSubtitle}>
-            You defeated the {guardianName} and mastered every stage of {realmTitle}.
+            {isFinale
+              ? `You defeated the ${guardianName} — the last fracture in time itself — and mastered every realm a Chronomancer must know.`
+              : `You defeated the ${guardianName} and mastered every stage of ${realmTitle}.`}
           </Text>
 
           <View style={styles.summaryGrid}>
@@ -248,21 +258,47 @@ export function RealmCompleteModal({
             </View>
           )}
 
-          <Pressable
-            style={styles.continueButton}
-            onPress={onPlayAgain}
-            accessibilityRole="button"
-            accessibilityLabel="Play again with a fresh set of questions"
-          >
-            <Text style={styles.continueButtonText}>Play Again ↻</Text>
-          </Pressable>
+          <View style={styles.modalButtonRow}>
+            {!isFinale && onNextRealm && (
+              <Pressable
+                style={styles.continueButton}
+                onPress={onNextRealm}
+                accessibilityRole="button"
+                accessibilityLabel="Continue to next realm"
+              >
+                <Text style={styles.continueButtonText}>Continue to Next Realm ➔</Text>
+              </Pressable>
+            )}
+            <Pressable
+              style={[styles.continueButton, styles.playAgainButton, !isFinale && onNextRealm && styles.playAgainButtonSecondary]}
+              onPress={onPlayAgain}
+              accessibilityRole="button"
+              accessibilityLabel="Play again with a fresh set of questions"
+            >
+              <Text style={[styles.continueButtonText, !isFinale && onNextRealm && styles.playAgainButtonTextSecondary]}>
+                {isFinale ? 'Play Again ↻' : 'Replay Realm ↻'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </Modal>
   );
 }
 
-function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: string; onRestart: () => void }) {
+function GameInner({
+  maxXp,
+  realmId,
+  onRestart,
+  onNextRealm,
+}: {
+  maxXp: number;
+  realmId?: string;
+  onRestart: () => void;
+  /** Advances the world map to the next not-yet-cleared realm. Omitted when the caller has no realm to switch to (e.g. this module isn't hosted inside the realm map). */
+  onNextRealm?: () => void;
+}) {
+  const hero = useGameState();
   const {
     stages,
     activeStageIndex,
@@ -289,6 +325,10 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
   const [pulseToken, setPulseToken] = useState(0);
   const prevXpRef = useRef(0);
   const isFirstResult = useRef(true);
+  // Set once, the moment a clear pushes hero.clearedRealms to cover every module —
+  // captured from `hero` as it stood just *before* this clear (see the effect
+  // below), so replaying an already-fully-cleared realm later never re-fires it.
+  const isFinaleRef = useRef(false);
   const pulse = React.useCallback(() => setPulseToken((t) => t + 1), []);
 
   const isFinalStage = activeStageIndex === stages.length - 1;
@@ -313,6 +353,8 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
     if (lastResult !== 'won') return;
     setShowBanner(true);
     if (isFinalStage) {
+      const wasNewClear = realmId ? !hero.clearedRealms.includes(realmId) : false;
+      if (wasNewClear && hero.clearedRealms.length + 1 >= MODULES.length) isFinaleRef.current = true;
       if (realmId) markRealmCleared(realmId);
       recordRunStats({ attempts: totalAttempts, correct: totalCorrect, bestStreak: bestStreakEver });
     }
@@ -350,6 +392,11 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
     } else {
       onRestart();
     }
+  }
+
+  function handleNextRealm() {
+    setShowBanner(false);
+    onNextRealm?.();
   }
 
   const StageCanvas = activeStage.renderCanvas;
@@ -406,6 +453,8 @@ function GameInner({ maxXp, realmId, onRestart }: { maxXp: number; realmId?: str
         bestStreakEver={bestStreakEver}
         skillsPracticed={skillsPracticed}
         onPlayAgain={handleContinue}
+        onNextRealm={onNextRealm ? handleNextRealm : undefined}
+        isFinale={isFinaleRef.current}
       />
     </View>
   );
@@ -417,6 +466,7 @@ export function DeepLearningGameScreen({
   maxXp,
   realmId,
   onRestart,
+  onNextRealm,
 }: {
   stages: MathStageConfig[];
   maxXp: number;
@@ -424,11 +474,13 @@ export function DeepLearningGameScreen({
   realmId?: string;
   /** Called when the player taps "Play Again" after mastering the final stage — the caller should regenerate fresh random content and remount this tree (e.g. via a changing `key`). */
   onRestart?: () => void;
+  /** Called when the player taps "Continue to Next Realm" — the caller (the world map) should switch the active realm. Omit to hide that button entirely. */
+  onNextRealm?: () => void;
 }) {
   return (
     <DeepLearningProvider stages={stages}>
       <View style={styles.root}>
-        <GameInner maxXp={maxXp} realmId={realmId} onRestart={onRestart ?? (() => {})} />
+        <GameInner maxXp={maxXp} realmId={realmId} onRestart={onRestart ?? (() => {})} onNextRealm={onNextRealm} />
       </View>
     </DeepLearningProvider>
   );
@@ -605,6 +657,24 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: DL_COLORS.bgDeep,
   },
+  modalButtonRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  playAgainButton: {
+    marginTop: 0,
+  },
+  playAgainButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: DL_COLORS.lime,
+  },
+  playAgainButtonTextSecondary: {
+    color: DL_COLORS.lime,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(6, 9, 18, 0.78)',
@@ -627,6 +697,11 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 14,
   },
+  modalCardFinale: {
+    backgroundColor: DL_COLORS.amethystSoft,
+    borderColor: DL_COLORS.amethyst,
+    shadowColor: DL_COLORS.amethyst,
+  },
   modalEmoji: {
     fontSize: 48,
   },
@@ -635,6 +710,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: DL_COLORS.lime,
     textAlign: 'center',
+  },
+  modalTitleFinale: {
+    color: DL_COLORS.amethyst,
   },
   modalSubtitle: {
     fontSize: 14,

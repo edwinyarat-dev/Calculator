@@ -601,7 +601,7 @@ function buildTrigStages(): MathStageConfig[] {
   ];
 }
 
-export default function TrigonometryGameModule() {
+export default function TrigonometryGameModule({ onNextRealm }: { onNextRealm?: () => void }) {
   const [playthrough, setPlaythrough] = useState(0);
   const stages = useMemo(buildTrigStages, [playthrough]);
   return (
@@ -611,6 +611,7 @@ export default function TrigonometryGameModule() {
       maxXp={220}
       realmId="trigonometry"
       onRestart={() => setPlaythrough((p) => p + 1)}
+      onNextRealm={onNextRealm}
     />
   );
 }

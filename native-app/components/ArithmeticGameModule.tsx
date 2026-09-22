@@ -534,7 +534,7 @@ function buildArithmeticStages(): MathStageConfig[] {
   ];
 }
 
-export default function ArithmeticGameModule() {
+export default function ArithmeticGameModule({ onNextRealm }: { onNextRealm?: () => void }) {
   const [playthrough, setPlaythrough] = useState(0);
   const stages = React.useMemo(buildArithmeticStages, [playthrough]);
   return (
@@ -544,6 +544,7 @@ export default function ArithmeticGameModule() {
       maxXp={220}
       realmId="arithmetic"
       onRestart={() => setPlaythrough((p) => p + 1)}
+      onNextRealm={onNextRealm}
     />
   );
 }

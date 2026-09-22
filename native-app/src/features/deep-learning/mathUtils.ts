@@ -27,6 +27,30 @@ export function shuffle<T>(items: T[]): T[] {
   return arr;
 }
 
+/**
+ * Builds a shuffled multiple-choice set for an arbitrary numeric answer:
+ * the real answer plus `count - 1` distinct nearby distractors, offset by a
+ * spread proportional to the answer's own magnitude (falls back to a fixed
+ * absolute spread for answers near zero, so a $0 or 0% answer still gets a
+ * sensible spread of options instead of a cluster of identical zeros).
+ * Shared by every stage that swapped its keypad for a tap-to-choose widget
+ * (CoinCatch, PuzzlePieces, EvidenceLineup, ScrollingReel).
+ */
+export function numericOptions(answer: number, count = 6, relativeSpread = 0.35): number[] {
+  const spread = Math.max(count + 2, Math.round(Math.abs(answer) * relativeSpread));
+  const candidates = new Set<number>();
+  const add = (value: number) => {
+    if (value !== answer && !candidates.has(value)) candidates.add(Math.max(0, value));
+  };
+  let guard = 0;
+  while (candidates.size < count - 1 && guard < 60) {
+    guard++;
+    const offset = randomInt(1, spread) * (Math.random() < 0.5 ? -1 : 1);
+    add(answer + offset);
+  }
+  return shuffle([answer, ...candidates]);
+}
+
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
 /**

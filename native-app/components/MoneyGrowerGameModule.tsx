@@ -2,11 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import Slider from '@react-native-community/slider';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import ReAnimated from 'react-native-reanimated';
+import { CoinCatch } from '../src/features/deep-learning/AnswerWidgets';
 import { useDeepLearning } from '../src/features/deep-learning/DeepLearningContext';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
 import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
-import { clampScore, randomInt, scoreAgainst, shuffle } from '../src/features/deep-learning/mathUtils';
-import { EntryDisplay, NumericKeypad } from '../src/features/deep-learning/NumericKeypad';
+import { clampScore, numericOptions, randomInt, scoreAgainst, shuffle } from '../src/features/deep-learning/mathUtils';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
 import { ParticleBurst, useSuccessEffects } from '../src/features/deep-learning/useSuccessEffects';
@@ -40,7 +40,7 @@ function generateStage1Problems(): { principal: number; ratePct: number }[] {
 function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const [problems] = useState(generateStage1Problems);
   const [round, setRound] = useState(0);
-  const [entry, setEntry] = useState('');
+  const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
@@ -50,25 +50,17 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
   const problem = problems[round];
   const interest = Math.round((problem.principal * problem.ratePct) / 100);
   const answer = Math.round(compoundAmount(problem.principal, problem.ratePct, 1));
+  const options = React.useMemo(() => numericOptions(answer, 6, 0.15), [round]);
 
   useEffect(() => {
     finalRoundWonRef.current = false;
-    setEntry('');
+    setSelected(null);
     setFeedback('idle');
   }, [round]);
 
-  function pressDigit(d: string) {
-    if (!isActive || entry.length >= 4) return;
-    setEntry((e) => e + d);
-  }
-  function backspace() {
-    if (!isActive) return;
-    setEntry((e) => e.slice(0, -1));
-  }
-
-  function submit() {
-    if (!isActive || entry === '') return;
-    const value = Number(entry);
+  function handleSelect(value: number) {
+    if (!isActive || feedback !== 'idle') return;
+    setSelected(value);
     if (value === answer) {
       setFeedback('correct');
       effects.trigger();
@@ -76,15 +68,15 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
         finalRoundWonRef.current = true;
         onCommit(1);
       } else {
-        setRound((r) => r + 1);
+        setTimeout(() => setRound((r) => r + 1), 650);
       }
     } else {
       setFeedback('wrong');
       if (isFinalRound) onCommit(scoreAgainst(value, answer));
       setTimeout(() => {
-        setEntry('');
+        setSelected(null);
         setFeedback('idle');
-      }, 500);
+      }, 1200);
     }
   }
 
@@ -92,19 +84,16 @@ function Stage1Foundations({ onCommit, isActive }: StageCanvasProps) {
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · a piggy bank that pays interest</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
-        <EntryDisplay
-          prompt={`You put $${problem.principal} in a savings account paying ${problem.ratePct}% a year. After 1 year, how much do you have?`}
-          entry={entry}
-          feedback={feedback}
-          prefix="$"
-        />
+        <Text style={styles.promptText}>
+          You put ${problem.principal} in a savings account paying {problem.ratePct}% a year. After 1 year, how much do you have?
+        </Text>
         {effects.isBursting && (
           <View style={styles.burstOverlay} pointerEvents="none">
             <ParticleBurst progress={effects.burstProgress} />
           </View>
         )}
       </ReAnimated.View>
-      <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
+      <CoinCatch options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} prefix="$" />
       <HintExplanationPanel
         hint={`Multiply $${problem.principal} by ${problem.ratePct}% to get the interest, then add it to $${problem.principal}.`}
         explanation={feedback !== 'idle' ? `$${problem.principal} × ${problem.ratePct}% = $${interest} interest. $${problem.principal} + $${interest} = $${answer}.` : null}
@@ -138,7 +127,7 @@ function generateStage2Problems(): { principal: number; ratePct: number; years: 
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [problems] = useState(generateStage2Problems);
   const [round, setRound] = useState(0);
-  const [entry, setEntry] = useState('');
+  const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
@@ -148,25 +137,17 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const problem = problems[round];
   const year1Balance = Math.round(compoundAmount(problem.principal, problem.ratePct, 1));
   const answer = Math.round(compoundAmount(problem.principal, problem.ratePct, problem.years));
+  const options = React.useMemo(() => numericOptions(answer, 6, 0.15), [round]);
 
   useEffect(() => {
     finalRoundWonRef.current = false;
-    setEntry('');
+    setSelected(null);
     setFeedback('idle');
   }, [round]);
 
-  function pressDigit(d: string) {
-    if (!isActive || entry.length >= 4) return;
-    setEntry((e) => e + d);
-  }
-  function backspace() {
-    if (!isActive) return;
-    setEntry((e) => e.slice(0, -1));
-  }
-
-  function submit() {
-    if (!isActive || entry === '') return;
-    const value = Number(entry);
+  function handleSelect(value: number) {
+    if (!isActive || feedback !== 'idle') return;
+    setSelected(value);
     if (value === answer) {
       setFeedback('correct');
       effects.trigger();
@@ -174,15 +155,15 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         finalRoundWonRef.current = true;
         onCommit(1);
       } else {
-        setRound((r) => r + 1);
+        setTimeout(() => setRound((r) => r + 1), 650);
       }
     } else {
       setFeedback('wrong');
       if (isFinalRound) onCommit(scoreAgainst(value, answer));
       setTimeout(() => {
-        setEntry('');
+        setSelected(null);
         setFeedback('idle');
-      }, 500);
+      }, 1200);
     }
   }
 
@@ -190,19 +171,16 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
     <View style={styles.stageBody}>
       <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · the balance compounds every year</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
-        <EntryDisplay
-          prompt={`$${problem.principal} at ${problem.ratePct}% a year, left alone for ${problem.years} years. What's the balance?`}
-          entry={entry}
-          feedback={feedback}
-          prefix="$"
-        />
+        <Text style={styles.promptText}>
+          ${problem.principal} at {problem.ratePct}% a year, left alone for {problem.years} years. What's the balance?
+        </Text>
         {effects.isBursting && (
           <View style={styles.burstOverlay} pointerEvents="none">
             <ParticleBurst progress={effects.burstProgress} />
           </View>
         )}
       </ReAnimated.View>
-      <NumericKeypad onDigit={pressDigit} onBackspace={backspace} onSubmit={submit} disabled={feedback !== 'idle'} />
+      <CoinCatch options={options} selected={selected} correctValue={answer} feedback={feedback} onSelect={handleSelect} prefix="$" />
       <HintExplanationPanel
         hint="Each year grows from LAST year's balance, not the original amount — compound it one year at a time."
         explanation={
@@ -473,7 +451,7 @@ function buildMoneyGrowerStages(): MathStageConfig[] {
   ];
 }
 
-export default function MoneyGrowerGameModule() {
+export default function MoneyGrowerGameModule({ onNextRealm }: { onNextRealm?: () => void }) {
   const [playthrough, setPlaythrough] = useState(0);
   const stages = React.useMemo(buildMoneyGrowerStages, [playthrough]);
   return (
@@ -483,6 +461,7 @@ export default function MoneyGrowerGameModule() {
       maxXp={220}
       realmId="compoundInterest"
       onRestart={() => setPlaythrough((p) => p + 1)}
+      onNextRealm={onNextRealm}
     />
   );
 }
@@ -513,6 +492,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  promptText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: DL_COLORS.text,
+    textAlign: 'center',
+    lineHeight: 23,
   },
   rateDisplay: {
     alignItems: 'center',
