@@ -27,7 +27,7 @@ export function WelcomeModal({ visible, onContinue }: WelcomeModalProps) {
           <Text style={styles.greeting}>Hello, welcome to MathQuest!</Text>
           <Text style={styles.body}>
             Somewhere between one heartbeat and the next, time has sprung a leak — and only a Chronomancer's apprentice
-            can mend it. Six fractured realms are waiting, each guarded by a creature born from a broken piece of math.
+            can mend it. Five fractured realms are waiting, each guarded by a creature born from a broken piece of math.
             Master them, and you master time itself.
           </Text>
           <Pressable

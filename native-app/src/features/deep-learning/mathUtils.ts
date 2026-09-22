@@ -34,7 +34,7 @@ export function shuffle<T>(items: T[]): T[] {
  * absolute spread for answers near zero, so a $0 or 0% answer still gets a
  * sensible spread of options instead of a cluster of identical zeros).
  * Shared by every stage that swapped its keypad for a tap-to-choose widget
- * (CoinCatch, PuzzlePieces, EvidenceLineup, ScrollingReel).
+ * (CoinCatch, PuzzlePieces, EvidenceLineup).
  */
 export function numericOptions(answer: number, count = 6, relativeSpread = 0.35): number[] {
   const spread = Math.max(count + 2, Math.round(Math.abs(answer) * relativeSpread));

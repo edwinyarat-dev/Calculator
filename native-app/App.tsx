@@ -60,9 +60,9 @@ function OnboardingGate() {
   );
 }
 
-// Several stages (Circle Spinner's holds, Limit Chaser's holds, every tap
-// widget in AnswerWidgets.tsx) are built around press-and-hold or fast
-// repeated taps. On web, React Native's own components don't disable text
+// Several stages (Circle Spinner's holds, every tap widget in
+// AnswerWidgets.tsx) are built around press-and-hold or fast repeated taps.
+// On web, React Native's own components don't disable text
 // selection or the mobile tap-highlight box the way native platforms do by
 // default, so those same gestures can leave a lingering browser text
 // selection or a flashed highlight rectangle behind — cosmetic, but not

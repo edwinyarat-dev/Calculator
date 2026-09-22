@@ -2,7 +2,6 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import ArithmeticGameModule from '../../components/ArithmeticGameModule';
 import DataDetectiveGameModule from '../../components/DataDetectiveGameModule';
-import LimitChaserGameModule from '../../components/LimitChaserGameModule';
 import MoneyGrowerGameModule from '../../components/MoneyGrowerGameModule';
 import ShapeArchitectGameModule from '../../components/ShapeArchitectGameModule';
 import TrigonometryGameModule from '../../components/TrigonometryGameModule';
@@ -15,18 +14,14 @@ export interface KineticStageProps {
   onNextRealm?: () => void;
 }
 
-// Number Ninja and Circle Spinner are the two modules already rebuilt as
-// full 4-stage deep-learning games (see components/*GameModule.tsx) — they
-// run here unmodified, just inside this fantasy-themed frame. The remaining
-// four modules still run their original calculator/graph UI until they get
-// the same 4-stage treatment.
+// Every realm runs the same 4-stage deep-learning engine (see
+// components/*GameModule.tsx) inside this fantasy-themed frame.
 const REALM_COMPONENTS: Record<ModuleKey, React.ComponentType<{ onNextRealm?: () => void }>> = {
   arithmetic: ArithmeticGameModule,
   trigonometry: TrigonometryGameModule,
   compoundInterest: MoneyGrowerGameModule,
   geometry: ShapeArchitectGameModule,
   statistics: DataDetectiveGameModule,
-  calculus: LimitChaserGameModule,
 };
 
 /** The active game viewport — renders whichever realm the player has selected in the RealmViewport. */

@@ -43,7 +43,7 @@ export const theme = {
   spacing: (multiplier: number) => multiplier * 4,
 };
 
-export type ModuleKey = 'arithmetic' | 'compoundInterest' | 'geometry' | 'statistics' | 'trigonometry' | 'calculus';
+export type ModuleKey = 'arithmetic' | 'compoundInterest' | 'geometry' | 'statistics' | 'trigonometry';
 
 export interface ModuleMeta {
   key: ModuleKey;
@@ -54,7 +54,7 @@ export interface ModuleMeta {
   accentDark: string;
   /** The guardian this realm's battle arena depicts — flavor text only, no combat math attached. */
   guardianName: string;
-  /** Kept distinct per realm on purpose — six different names sharing one emoji would look like the same guardian everywhere. */
+  /** Kept distinct per realm on purpose — five different names sharing one emoji would look like the same guardian everywhere. */
   guardianEmoji: string;
   /** Shown in the guardian's detail popup: what it represents and how a player "beats" it. */
   guardianPurpose: string;
@@ -115,17 +115,6 @@ export const MODULES: ModuleMeta[] = [
     guardianName: 'Vortex Maw',
     guardianEmoji: '🕳️',
     guardianPurpose: 'A swirling force born from the unit circle. It represents the trigonometry realm — steady it by mastering sine, cosine, and rotation.',
-  },
-  {
-    key: 'calculus',
-    title: 'Limit Chaser',
-    blurb: 'Squeeze h to zero and catch the tangent',
-    emoji: '🚀',
-    accent: theme.color.coral,
-    accentDark: theme.color.coralDark,
-    guardianName: 'Infinity Wraith',
-    guardianEmoji: '🌌',
-    guardianPurpose: 'A being from the edge of the infinitely small. It represents the calculus realm — tame it by understanding limits and rates of change.',
   },
 ];
 

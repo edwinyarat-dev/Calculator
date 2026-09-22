@@ -60,7 +60,7 @@ export const BADGES: BadgeDef[] = [
   { id: 'first-blood', emoji: '🗡️', label: 'First Blood', description: 'Defeated your first guardian.' },
   { id: 'perfectionist', emoji: '💎', label: 'Perfectionist', description: 'Cleared a realm without a single wrong answer.' },
   { id: 'streak-master', emoji: '🔥', label: 'Streak Master', description: 'Hit a 5+ answer streak.' },
-  { id: 'hexad', emoji: '👑', label: 'Hexad', description: `Mastered all ${MODULES.length} realms.` },
+  { id: 'realm-master', emoji: '👑', label: 'Realm Master', description: `Mastered all ${MODULES.length} realms.` },
 ];
 
 /** Per-realm-completion stats a module reports once it clears its final stage, folded into the Hero's lifetime totals/badges. */
@@ -202,7 +202,7 @@ export function markRealmCleared(realmId: string): void {
   if (state.clearedRealms.includes(realmId)) return;
   const clearedRealms = [...state.clearedRealms, realmId];
   let badges = state.badges;
-  if (clearedRealms.length >= MODULES.length) badges = withBadge(badges, 'hexad');
+  if (clearedRealms.length >= MODULES.length) badges = withBadge(badges, 'realm-master');
   state = buildState(state.totalXp, clearedRealms, state.totalAttempts, state.totalCorrect, state.bestStreakEver, badges, state.characterId);
   persist();
   notify();

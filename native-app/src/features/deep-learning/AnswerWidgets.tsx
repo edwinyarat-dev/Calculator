@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -9,12 +9,11 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useBattlePulse } from './BattlePulseContext';
-import { randomInt } from './mathUtils';
 import { DL_COLORS } from './theme';
 
-// Four alternatives to the plain digit keypad, one per realm still using it —
+// Three alternatives to the plain digit keypad, one per realm still using it —
 // each a genuinely different physical action, not the same grid re-skinned.
-// All four share AnswerBlocks' contract (options/selected/correctValue/
+// All three share AnswerBlocks' contract (options/selected/correctValue/
 // feedback/onSelect) and its accessibility-label convention
 // (`Answer option ${value}`) so they drop straight into any stage that used
 // to render a keypad, and the existing bot-testing pattern still works.
@@ -251,80 +250,6 @@ export function EvidenceLineup({ options, selected, correctValue, feedback, disa
   );
 }
 
-// ---------------------------------------------------------------------------
-// Limit Chaser — "Stop the Reel": candidates cycle past one at a time; stop
-// the reel the instant the right one shows.
-// ---------------------------------------------------------------------------
-
-const REEL_TICK_MS = 750;
-
-export interface ScrollingReelProps extends AnswerWidgetProps {
-  /** Cycling index is owned by the caller so a fresh round can reset it deterministically — see mathUtils.randomInt for the starting offset. */
-  resetKey: number;
-}
-
-/** A slot-machine-style reel of candidate numbers — hit stop the instant the right one lines up. */
-export function ScrollingReel({ options, correctValue, feedback, disabled, onSelect, prefix, resetKey }: ScrollingReelProps) {
-  const pulse = useBattlePulse();
-  const [index, setIndex] = useState(0);
-  const reducedMotion = useReducedMotion();
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    setIndex(randomInt(0, options.length - 1));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetKey]);
-
-  useEffect(() => {
-    if (feedback !== 'idle' || disabled) {
-      if (tickRef.current) clearInterval(tickRef.current);
-      return;
-    }
-    tickRef.current = setInterval(() => {
-      setIndex((i) => (i + 1) % options.length);
-    }, REEL_TICK_MS);
-    return () => {
-      if (tickRef.current) clearInterval(tickRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedback, disabled, options.length, resetKey]);
-
-  const current = options[index] ?? options[0];
-  const isWrong = feedback === 'wrong';
-
-  return (
-    <View style={styles.reelWrap}>
-      <View style={[styles.reelWindow, feedback === 'correct' && styles.reelWindowCorrect, isWrong && styles.reelWindowWrong]}>
-        <Text style={styles.reelValue} accessibilityLabel={`Reel showing ${current}`}>
-          {prefix ?? ''}
-          {current}
-        </Text>
-      </View>
-      {feedback === 'idle' ? (
-        <Pressable
-          disabled={disabled}
-          onPress={() => {
-            pulse();
-            onSelect(current);
-          }}
-          style={styles.stopButton}
-          accessibilityRole="button"
-          accessibilityLabel="Stop the reel"
-        >
-          <Text style={styles.stopButtonText}>✋ STOP</Text>
-        </Pressable>
-      ) : (
-        <View style={styles.reelResult}>
-          <Text style={[styles.reelResultText, feedback === 'correct' ? styles.reelResultGood : styles.reelResultBad]}>
-            {feedback === 'correct' ? 'Nailed it!' : `Correct answer: ${prefix ?? ''}${correctValue}`}
-          </Text>
-        </View>
-      )}
-      {reducedMotion && feedback === 'idle' && <Text style={styles.reelReducedMotionNote}>Reel updates every {REEL_TICK_MS / 1000}s.</Text>}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   // Coin Catch
   coinField: {
@@ -448,32 +373,4 @@ const styles = StyleSheet.create({
   },
   cardStampGood: { color: DL_COLORS.lime, borderColor: DL_COLORS.lime },
   cardStampBad: { color: DL_COLORS.danger, borderColor: DL_COLORS.danger },
-
-  // Stop the Reel
-  reelWrap: { width: '100%', alignItems: 'center', gap: 12 },
-  reelWindow: {
-    width: '100%',
-    maxWidth: 260,
-    paddingVertical: 20,
-    borderRadius: 14,
-    borderWidth: 2.5,
-    borderColor: DL_COLORS.sky,
-    backgroundColor: DL_COLORS.skySoft,
-    alignItems: 'center',
-  },
-  reelWindowCorrect: { borderColor: DL_COLORS.lime, backgroundColor: DL_COLORS.limeSoft },
-  reelWindowWrong: { borderColor: DL_COLORS.danger, backgroundColor: DL_COLORS.dangerSoft },
-  reelValue: { fontSize: 32, fontWeight: '800', color: DL_COLORS.text },
-  stopButton: {
-    backgroundColor: DL_COLORS.sky,
-    borderRadius: 999,
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-  },
-  stopButtonText: { fontSize: 15, fontWeight: '800', color: DL_COLORS.bgDeep },
-  reelResult: { minHeight: 48, justifyContent: 'center' },
-  reelResultText: { fontSize: 14, fontWeight: '800' },
-  reelResultGood: { color: DL_COLORS.lime },
-  reelResultBad: { color: DL_COLORS.danger },
-  reelReducedMotionNote: { fontSize: 11, color: DL_COLORS.textMuted },
 });
