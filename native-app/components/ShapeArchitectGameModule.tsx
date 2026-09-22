@@ -5,8 +5,10 @@ import ReAnimated from 'react-native-reanimated';
 import Svg, { Circle as SvgCircle, Line, Rect } from 'react-native-svg';
 import { useDeepLearning } from '../src/features/deep-learning/DeepLearningContext';
 import { DeepLearningGameScreen } from '../src/features/deep-learning/GameChrome';
+import { AreaFill, PerimeterTrace } from '../src/features/deep-learning/GeometryVisuals';
 import { HintExplanationPanel } from '../src/features/deep-learning/HintExplanationPanel';
 import { PuzzlePieces } from '../src/features/deep-learning/AnswerWidgets';
+import { LearnTheMove, LearnTheMoveButton, type LearnTheMoveStep } from '../src/features/deep-learning/LearnTheMove';
 import { clampScore, numericOptions, randomInt, scoreAgainst } from '../src/features/deep-learning/mathUtils';
 import { DL_COLORS } from '../src/features/deep-learning/theme';
 import type { MathStageConfig, StageCanvasProps } from '../src/features/deep-learning/types';
@@ -209,11 +211,97 @@ function generateStage2Problems(): GeometryProblem[] {
   ];
 }
 
+// The lesson: Stage 2 mixes two genuinely different questions — perimeter
+// ("distance around") for a rectangle and a triangle, then area ("space
+// inside") for a circle. The walkthrough teaches perimeter first with two
+// worked shapes back-to-back (so the "add every side" rule reads as general,
+// not rectangle-specific), then deliberately contrasts it against area last,
+// since mixing the two up is the actual mistake this stage catches. A pool
+// of number sets (not just one fixed example) means "New Numbers" always
+// produces clean integer answers — no fractional side lengths to confuse the
+// lesson itself.
+interface ShapeScenario {
+  rectW: number;
+  rectH: number;
+  triSide: number;
+  circleR: number;
+}
+const SHAPE_SCENARIOS: ShapeScenario[] = [
+  { rectW: 5, rectH: 3, triSide: 6, circleR: 4 },
+  { rectW: 8, rectH: 4, triSide: 9, circleR: 6 },
+  { rectW: 6, rectH: 6, triSide: 5, circleR: 3 },
+  { rectW: 10, rectH: 2, triSide: 12, circleR: 7 },
+  { rectW: 4, rectH: 7, triSide: 8, circleR: 5 },
+  { rectW: 9, rectH: 5, triSide: 10, circleR: 8 },
+  { rectW: 3, rectH: 9, triSide: 7, circleR: 2 },
+  { rectW: 7, rectH: 7, triSide: 11, circleR: 9 },
+];
+
+function pickOtherShapeScenarioIndex(current: number): number {
+  if (SHAPE_SCENARIOS.length <= 1) return current;
+  let next = randomInt(0, SHAPE_SCENARIOS.length - 1);
+  while (next === current) next = randomInt(0, SHAPE_SCENARIOS.length - 1);
+  return next;
+}
+
+function buildShapeLearnSteps(scenario: ShapeScenario): LearnTheMoveStep[] {
+  const { rectW, rectH, triSide, circleR } = scenario;
+  const rectPerimeter = 2 * (rectW + rectH);
+  const triPerimeter = 3 * triSide;
+  const circleArea = Math.round(Math.PI * circleR * circleR);
+  return [
+    {
+      title: 'Perimeter = walk the edge',
+      body: `Perimeter is the distance AROUND a shape. Trace every side of this ${rectW}×${rectH} rectangle and add what you cross.`,
+      visual: (
+        <PerimeterTrace
+          shape="rectangle"
+          sides={[rectW, rectH]}
+          edgeLabels={[String(rectW), String(rectH), String(rectW), String(rectH)]}
+          totalLabel={`${rectW}+${rectH}+${rectW}+${rectH} = ${rectPerimeter}`}
+        />
+      ),
+    },
+    {
+      title: 'The rectangle shortcut',
+      body: `Opposite sides of a rectangle always match, so instead of 4 numbers, just do 2 × (width + height).`,
+      visual: (
+        <PerimeterTrace
+          shape="rectangle"
+          sides={[rectW, rectH]}
+          edgeLabels={[String(rectW), String(rectH), String(rectW), String(rectH)]}
+          totalLabel={`2 × (${rectW} + ${rectH}) = ${rectPerimeter}`}
+        />
+      ),
+    },
+    {
+      title: 'Same rule, any shape',
+      body: `A triangle has 3 sides instead of 4 — the rule never changes. Add every side you trace.`,
+      visual: (
+        <PerimeterTrace
+          shape="triangle"
+          sides={[triSide]}
+          edgeLabels={[String(triSide), String(triSide), String(triSide)]}
+          totalLabel={`${triSide}+${triSide}+${triSide} = ${triPerimeter}`}
+        />
+      ),
+    },
+    {
+      title: 'Area asks a different question',
+      body: `Area isn't the distance around — it's the SPACE INSIDE. For a circle, that's π × radius², not another "add the sides" trick.`,
+      visual: <AreaFill formulaLabel={`π × ${circleR}²`} areaLabel={`≈ ${circleArea} sq units`} />,
+    },
+  ];
+}
+
 function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const [problems] = useState(generateStage2Problems);
   const [round, setRound] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
+  const [showLearn, setShowLearn] = useState(true);
+  const [scenarioIndex, setScenarioIndex] = useState(() => randomInt(0, SHAPE_SCENARIOS.length - 1));
+  const [refreshKey, setRefreshKey] = useState(0);
   const finalRoundWonRef = useRef(false);
   const effects = useSuccessEffects();
   const { isNearMiss } = useDeepLearning();
@@ -221,6 +309,12 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
   const isFinalRound = round === problems.length - 1;
   const problem = problems[round];
   const options = React.useMemo(() => numericOptions(problem.answer, 6, 0.2), [round]);
+  const learnSteps = React.useMemo(() => buildShapeLearnSteps(SHAPE_SCENARIOS[scenarioIndex]), [scenarioIndex]);
+
+  function handleRefreshExample() {
+    setScenarioIndex((current) => pickOtherShapeScenarioIndex(current));
+    setRefreshKey((k) => k + 1);
+  }
 
   useEffect(() => {
     finalRoundWonRef.current = false;
@@ -252,6 +346,14 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
 
   return (
     <View style={styles.stageBody}>
+      <LearnTheMove
+        visible={showLearn}
+        onDismiss={() => setShowLearn(false)}
+        moduleTitle="Perimeter vs. Area"
+        steps={learnSteps}
+        onRefresh={handleRefreshExample}
+        refreshKey={refreshKey}
+      />
       <Text style={styles.stageObjective}>Round {round + 1} of {problems.length} · real jobs that need geometry</Text>
       <ReAnimated.View style={[styles.canvasCard, effects.targetPopStyle]}>
         <Text style={styles.promptText}>{problem.prompt}</Text>
@@ -262,6 +364,7 @@ function Stage2QuantitativeMechanics({ onCommit, isActive }: StageCanvasProps) {
         )}
       </ReAnimated.View>
       <PuzzlePieces options={options} selected={selected} correctValue={problem.answer} feedback={feedback} onSelect={handleSelect} />
+      {feedback === 'idle' && <LearnTheMoveButton onPress={() => setShowLearn(true)} />}
       <HintExplanationPanel
         hint={problem.hint}
         explanation={feedback !== 'idle' ? problem.explanation : null}
