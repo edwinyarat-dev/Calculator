@@ -4,6 +4,7 @@ import { awardXP, markRealmCleared, recordRunStats, useGameState } from '../../u
 import { MODULES } from '../../../theme';
 import { BattlePulseProvider } from './BattlePulseContext';
 import { BattleStage } from './BattleStage';
+import { CalculatorPopover } from './CalculatorPopover';
 import { DeepLearningProvider, useDeepLearning } from './DeepLearningContext';
 import LevelSelector from './LevelSelector';
 import { DL_COLORS } from './theme';
@@ -24,8 +25,11 @@ function MagicDeckFrame({ children }: { children: React.ReactNode }) {
   return (
     <View style={styles.deckFrame}>
       <View style={styles.deckHeader}>
-        <View style={styles.deckHeaderDot} />
-        <Text style={styles.deckHeaderText}>Magic Deck</Text>
+        <View style={styles.deckHeaderLeft}>
+          <View style={styles.deckHeaderDot} />
+          <Text style={styles.deckHeaderText}>Magic Deck</Text>
+        </View>
+        <CalculatorPopover />
       </View>
       {children}
     </View>
@@ -411,8 +415,13 @@ const styles = StyleSheet.create({
   deckHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'space-between',
     marginBottom: 10,
+  },
+  deckHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   deckHeaderDot: {
     width: 7,
