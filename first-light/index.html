@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>First Light</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a0d22">
@@ -49,6 +50,7 @@
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; }
   body {
     margin: 0;
@@ -121,6 +123,7 @@
   h1 { font-size: clamp(30px, 8vw, 40px); }
   h2 { font-size: clamp(24px, 6vw, 30px); }
   p { margin: 0; }
+  .hl { font-style: normal; color: var(--sun-deep); }
   .lede { color: var(--ink-soft); font-size: 17px; max-width: 60ch; }
 
   .btnrow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; }
@@ -352,12 +355,156 @@
 
   const DEFAULT_CHECKS = ["Feet on the floor", "Glass of water", "Open the curtains"];
 
+  // Opening lines for the wake screen. *word* is highlighted.
+  const WAKE_LINES = [
+    "You opened this instead of the *feed*.",
+    "Your thumb found this first. That's the whole *trick*.",
+    "The feed can wait. It always *does*.",
+    "Nothing happened overnight that needs you in the next five *minutes*.",
+    "You chose the quiet door this *morning*.",
+    "The algorithm didn't get your first *thought* today.",
+    "Good call. The scroll would have taken *forty* minutes.",
+    "Your first minutes belong to *you*.",
+    "The world kept turning without your *likes*.",
+    "Nobody posted anything that beats a slow *breath*.",
+    "Reels will still be there. So will you, just more *awake*.",
+    "You picked the app that *ends*.",
+    "The first screen of the day sets the *tone*.",
+    "Every morning you open this, the habit gets *weaker*.",
+    "You're awake. The feed doesn't get to know *yet*.",
+    "Hold the phone. Just don't hand it your *attention*.",
+    "The best post of the day is the one you *skip*.",
+    "This is a five-minute app. Then it *lets you go*.",
+    "Your brain is booting up. Give it *clean* data.",
+    "No red dots here. Just a *start*.",
+    "You came here on purpose. That *counts*.",
+    "There's no infinite scroll here, only a *finish* line.",
+    "The feed wants your morning. You kept *it*.",
+    "You didn't reach for the noise. You reached for the *light*.",
+    "One small choice, made before anything else. *Nice*.",
+    "Your eyes just opened. Let them see something *real*.",
+    "The internet is still asleep. Be the one who's *up*.",
+    "You're not behind. Nothing important moved while you *slept*.",
+    "Today starts with you, not with *strangers*.",
+    "A calm first minute is a quiet *superpower*.",
+    "You opened a door with a *wall* behind it. Good.",
+    "The feed is loud. This is the *pause*.",
+    "Before the news, before the noise, *you*.",
+    "You chose five minutes over five *hours*.",
+    "The scroll never ends. Your morning *can*.",
+    "Yesterday's you would be *proud*.",
+    "This is the part of the day nobody can *sell*.",
+    "Your attention is worth more than an ad *slot*.",
+    "No one's watching this. Which makes it *honest*.",
+    "The best feeds have a last *page*.",
+    "Your brain on scroll is borrowed. This one is *yours*.",
+    "The feed would have picked your mood. You get to pick *instead*.",
+    "Sunrise doesn't need a *caption*.",
+    "Start slow. The day speeds up on its *own*.",
+    "You broke the loop again. That's how loops *break*.",
+    "The first tap of the day was a good *one*.",
+    "This moment doesn't need to be *shared*.",
+    "Something is different about today: you *started* it.",
+    "Muscle memory reached for the phone. You pointed it *here*.",
+    "You're awake before the *algorithm* is.",
+    "Five quiet minutes beat fifty loud *ones*.",
+    "There's nothing to catch up on. You're *already* here.",
+    "You can be the kind of person who starts *slowly*.",
+    "Your morning is not a *content* stream.",
+    "The group chat can wait for you to be *human*.",
+    "You're not missing out. You're *opting* in.",
+    "Every open here is a vote for the person you want to *be*.",
+    "Your phone is a tool this morning, not a *trap*.",
+    "Morning, unfiltered and *unsponsored*.",
+    "The feed learns what you like. This learns what you *need*.",
+    "You're here. That's already the hard *part*.",
+    "Start with a breath, not a *headline*.",
+    "The best notification today is your own *heartbeat*.",
+    "The day hasn't asked anything of you *yet*.",
+    "Your thumb is here. Your mind can *follow*.",
+    "You opened the one app that wants you to *leave*.",
+    "The world can wait. The *window* can't.",
+    "You're up before your *worries*.",
+    "The internet had all night. You get the *morning*.",
+    "Your first thought today is *free* of ads.",
+    "You already beat the scroll *once* today.",
+    "You didn't doomscroll. You *dawn*-scrolled.",
+    "The shortest path out of bed runs through *here*.",
+    "This isn't a feed. It's a *runway*.",
+    "You showed up for yourself *again*.",
+    "No trends. No takes. Just *today*.",
+    "You're allowed to have a *boring*, peaceful morning.",
+    "The bed is warm. The day is *warmer*.",
+    "Scrolling fills time. This *uses* it.",
+    "The feed can't give you back the *morning*. You kept it.",
+    "Today gets the *first* draft of you.",
+    "This app has a last screen. Your feed *doesn't*.",
+    "You're not the product this *morning*.",
+    "You picked the slower, *better* start.",
+    "Nothing here will make you *angry*.",
+    "Nobody here wants you to scroll *further*.",
+    "Waking up is enough of an *event*.",
+    "The feed will not miss you. Your day *will* notice.",
+    "Mornings are rare. Don't trade them for *reruns*.",
+    "The news of the day is that you're *awake*.",
+    "Look up soon. The *ceiling* has better lighting than Reels.",
+    "You don't have to earn the morning. Just *meet* it.",
+    "You turned the autopilot *off*.",
+    "Small habit, big *mornings*.",
+    "You took the phone out of the *loop*.",
+    "One screen. One job. Then *done*.",
+    "Today, you're the one *posting* the plan.",
+    "Your morning just got its *edges* back.",
+    "You opened this with your eyes half shut. *Respect*.",
+    "Scroll less, *live* more. Starting now.",
+    "The feed can refresh. So can *you*.",
+    "The first choice of the day was a *wise* one.",
+    "There's no algorithm here. Just a *sunrise*.",
+    "You pulled the handbrake on the *scroll*.",
+    "This is how good days quietly *begin*.",
+    "Consider this your morning *armour*.",
+    "Your brain wanted a hit. It's getting a *breath*.",
+    "No one online knows you're awake. *Enjoy* that.",
+    "Stay here five minutes. The *feed* stays there.",
+    "You're writing today's first *line*, not reading someone else's.",
+    "You chose the opening move. Well *played*.",
+    "You didn't wake up to the world. You woke up to *yourself*.",
+    "Here's to a morning with no *spoilers*.",
+    "You beat the reflex. Now let's beat the *bed*.",
+    "The day is a blank *page*. Let's keep it that way a moment longer.",
+    "The feed has no morning. *You* do.",
+    "Quiet first, loud *later*.",
+    "This minute is already *better* than a scroll.",
+    "You're early for your own *life*.",
+    "Welcome back. The sun kept your *seat*."
+  ];
+
+  // A new line every time the app opens, with no repeats until all of them have been shown.
+  function pickWakeLine() {
+    let bag = store.get("lineBag", []);
+    const last = store.get("lastLine", -1);
+    bag = Array.isArray(bag) ? bag.filter((i) => Number.isInteger(i) && i >= 0 && i < WAKE_LINES.length) : [];
+    if (!bag.length) {
+      bag = WAKE_LINES.map((_, i) => i);
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+      if (bag[0] === last && bag.length > 1) [bag[0], bag[1]] = [bag[1], bag[0]];
+    }
+    const pick = bag.shift();
+    store.set("lineBag", bag);
+    store.set("lastLine", pick);
+    return WAKE_LINES[pick];
+  }
+
   // ---------- state ----------
   const STEPS = ["wake", "breathe", "read", "move", "plan", "done"];
   let step = 0;
   const startedAt = Date.now();
   const today = dayKey();
   const passage = PASSAGES[dayOfYear() % PASSAGES.length];
+  const wakeLine = pickWakeLine();
 
   const $ = (s, r = document) => r.querySelector(s);
   const card = $("#card");
@@ -432,9 +579,10 @@
       const already = streak.last === today;
       const h = new Date().getHours();
       const hello = h < 5 ? "Still night out there" : h < 12 ? "Good morning" : "Hello again";
+      const line = esc(wakeLine).replace(/\*(.+?)\*/, '<em class="hl">$1</em>');
       card.innerHTML = `
-        <p class="eyebrow">${already ? "Already done today" : "Five minutes, then you're free"}</p>
-        <h1>${hello}. You opened this instead of the feed.</h1>
+        <p class="eyebrow">${hello} · ${already ? "already done today" : "five minutes, then you're free"}</p>
+        <h1>${line}</h1>
         <p class="lede">Your thumb wanted something to hold on to. This gives it a short, finished job:
           breathe, read one passage, get out of bed, pick your one thing. Then it ends.</p>
         <p class="small">${streak.count > 0 ? `Current streak: ${streak.count} ${streak.count === 1 ? "morning" : "mornings"}.` : "Day one. Nothing to live up to yet."}</p>
