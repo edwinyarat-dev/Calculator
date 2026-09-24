@@ -1,6 +1,6 @@
 <title>First Light</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1a1f36">
+<meta name="theme-color" content="#0a0d22">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="First Light">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,9 +15,6 @@
     --line: #d7dbe8;
     --sun: #f0a045;
     --sun-deep: #d9772b;
-    --sky-top: #b9c6ea;
-    --sky-low: #f7d9b8;
-    --hill: #2c3456;
     --ok: #3f8f6b;
     --focus: #4b63d6;
     --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
@@ -34,9 +31,6 @@
       --line: #2e3456;
       --sun: #f5b25c;
       --sun-deep: #f08c3c;
-      --sky-top: #151a36;
-      --sky-low: #5a4a6e;
-      --hill: #0b0e1e;
       --ok: #6cc59b;
       --focus: #8fa2ff;
     }
@@ -50,9 +44,6 @@
     --line: #2e3456;
     --sun: #f5b25c;
     --sun-deep: #f08c3c;
-    --sky-top: #151a36;
-    --sky-low: #5a4a6e;
-    --hill: #0b0e1e;
     --ok: #6cc59b;
     --focus: #8fa2ff;
   }
@@ -79,25 +70,31 @@
     gap: 16px;
   }
 
-  /* Horizon: the sun climbs one notch per finished step */
+  /* Horizon: a pre-dawn sky in both themes. The sun travels an arc,
+     one stop per finished step; the axis shows real clock times. */
   .horizon {
     position: relative;
     border-radius: 18px;
     overflow: hidden;
     aspect-ratio: 16 / 7;
     max-width: 100%;
-    background: linear-gradient(180deg, var(--sky-top), var(--sky-low));
+    background: #0a0d22;
   }
   .horizon svg { display: block; width: 100%; height: 100%; }
-  .horizon .sun { fill: var(--sun); transition: transform 1.2s cubic-bezier(.2,.7,.2,1); }
-  .horizon .glow { fill: var(--sun); opacity: .25; transition: transform 1.2s cubic-bezier(.2,.7,.2,1); }
-  .horizon .hill { fill: var(--hill); }
+  .horizon .arc-rest { fill: none; stroke: #8d93c9; stroke-opacity: .35; stroke-width: .8; stroke-dasharray: 2 3; }
+  .horizon .arc-done { fill: none; stroke: #f5b25c; stroke-width: 1.4; stroke-linecap: round; }
+  .horizon .stop { fill: #3a3f6e; }
+  .horizon .stop.passed { fill: #f5b25c; }
+  .horizon .ground { fill: #070918; }
+  .horizon .line { stroke: #ffffff; stroke-opacity: .18; stroke-width: .6; fill: none; }
+  .horizon .tick { font-family: var(--mono); font-size: 7.5px; fill: #9aa0c8; letter-spacing: .04em; }
   .horizon .meta {
     position: absolute; inset: 12px 14px auto 14px;
     display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
     font-family: var(--mono); font-size: 12px; letter-spacing: .04em;
-    color: var(--ink); opacity: .8;
+    color: #e6e4f2;
   }
+  .horizon .meta .stage { color: #f5b25c; }
 
   .steps {
     display: flex; gap: 6px; list-style: none; padding: 0; margin: 0;
@@ -221,7 +218,7 @@
   .brand i { font-style: normal; color: var(--sun-deep); }
 
   @media (prefers-reduced-motion: reduce) {
-    .horizon .sun, .horizon .glow, .breath .orb { transition: none; }
+    .breath .orb { transition: none; }
   }
 </style>
 
@@ -233,13 +230,43 @@
 
   <div class="horizon" aria-hidden="true">
     <svg viewBox="0 0 320 140" preserveAspectRatio="xMidYMid slice">
-      <g id="sunGroup">
-        <circle class="glow" cx="160" cy="0" r="34" id="glow"></circle>
-        <circle class="sun" cx="160" cy="0" r="20" id="sunDisc"></circle>
+      <defs>
+        <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#0a0d22"></stop>
+          <stop offset="1" stop-color="#1b1d48"></stop>
+        </linearGradient>
+        <linearGradient id="dawnGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#2a3170" stop-opacity="0"></stop>
+          <stop offset=".7" stop-color="#6b4a78" stop-opacity=".55"></stop>
+          <stop offset="1" stop-color="#f0a045" stop-opacity=".75"></stop>
+        </linearGradient>
+        <radialGradient id="glowGrad">
+          <stop offset="0" stop-color="#ffd48a" stop-opacity=".9"></stop>
+          <stop offset=".35" stop-color="#f5a04a" stop-opacity=".45"></stop>
+          <stop offset="1" stop-color="#f5a04a" stop-opacity="0"></stop>
+        </radialGradient>
+      </defs>
+      <rect width="320" height="140" fill="url(#skyGrad)"></rect>
+      <rect id="dawn" width="320" height="140" fill="url(#dawnGrad)" opacity="0"></rect>
+      <g id="stars" fill="#dfe3ff">
+        <circle cx="38" cy="30" r=".7"></circle><circle cx="72" cy="52" r=".5"></circle>
+        <circle cx="118" cy="22" r=".6"></circle><circle cx="176" cy="44" r=".5"></circle>
+        <circle cx="214" cy="18" r=".8"></circle><circle cx="262" cy="58" r=".5"></circle>
+        <circle cx="296" cy="26" r=".6"></circle><circle cx="140" cy="70" r=".4"></circle>
       </g>
-      <path class="hill" d="M0 112 C 60 96, 110 104, 160 108 S 260 96, 320 104 L 320 140 L 0 140 Z"></path>
+      <path id="arc" class="arc-rest" pathLength="1" d="M22 112 C 80 40, 190 18, 298 30"></path>
+      <path id="arcDone" class="arc-done" pathLength="1" stroke-dasharray="0 1" d="M22 112 C 80 40, 190 18, 298 30"></path>
+      <g id="stops"></g>
+      <g id="sun">
+        <circle r="30" fill="url(#glowGrad)"></circle>
+        <circle r="5" fill="#fff6e2" stroke="#f5b25c" stroke-width="1.6"></circle>
+      </g>
+      <path class="ground" d="M0 106 Q 160 100 320 106 L 320 140 L 0 140 Z"></path>
+      <path class="line" d="M0 106 Q 160 100 320 106"></path>
+      <text class="tick" x="16" y="124" id="tStart">06:42 start</text>
+      <text class="tick" x="304" y="124" text-anchor="end" id="tEnd">06:47 goal</text>
     </svg>
-    <div class="meta"><span id="clock">06:42</span><span id="date">Thu 24 Sep</span></div>
+    <div class="meta"><span><span id="clock">06:42</span> · <span class="stage" id="stage">Pre-dawn</span></span><span id="date">Thu 24 Sep</span></div>
   </div>
 
   <ol class="steps" id="steps" aria-label="Progress"></ol>
@@ -343,12 +370,47 @@
     $("#clock").textContent = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     $("#date").textContent = d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
   }
+  // Where the sun sits on the arc for each step: just under the horizon at "wake", near the top at "done"
+  const STOPS = STEPS.map((_, i) => 0.04 + (i / (STEPS.length - 1)) * 0.92);
+  const STAGES = ["Pre-dawn", "Twilight", "First light", "Sunrise", "Morning", "Full morning"];
+  const arc = $("#arc");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let sunAt = STOPS[0];
+  let sunAnim = 0;
+  const fmtTime = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  $("#stops").innerHTML = STOPS.map((f) => {
+    const pt = arc.getPointAtLength(f * arc.getTotalLength());
+    return `<circle class="stop" r="1.6" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}"></circle>`;
+  }).join("");
+
+  function drawSun(f) {
+    const pt = arc.getPointAtLength(f * arc.getTotalLength());
+    const t = (f - STOPS[0]) / (STOPS[STOPS.length - 1] - STOPS[0]);
+    $("#sun").setAttribute("transform", `translate(${pt.x.toFixed(2)} ${pt.y.toFixed(2)})`);
+    $("#arcDone").setAttribute("stroke-dasharray", `${f.toFixed(4)} 1`);
+    $("#dawn").setAttribute("opacity", (0.15 + 0.85 * t).toFixed(3));
+    $("#stars").setAttribute("opacity", (1 - t).toFixed(3));
+  }
   function placeSun() {
-    // below the hill at step 0, high in the sky at "done"
-    const t = step / (STEPS.length - 1);
-    const y = 128 - t * 92;
-    $("#sunDisc").style.transform = `translateY(${y}px)`;
-    $("#glow").style.transform = `translateY(${y}px)`;
+    const target = STOPS[step];
+    [...$("#stops").children].forEach((c, i) => c.classList.toggle("passed", i <= step));
+    $("#stage").textContent = STAGES[step];
+    $("#tStart").textContent = `${fmtTime(startedAt)} start`;
+    $("#tEnd").textContent = step === STEPS.length - 1
+      ? `${fmtTime(Date.now())} done`
+      : `${fmtTime(startedAt + 5 * 60000)} goal`;
+    cancelAnimationFrame(sunAnim);
+    if (reduceMotion) { sunAt = target; drawSun(sunAt); return; }
+    const from = sunAt, t0 = performance.now(), dur = 1400;
+    const ease = (x) => 1 - Math.pow(1 - x, 3);
+    const frame = (now) => {
+      const k = Math.min(1, (now - t0) / dur);
+      sunAt = from + (target - from) * ease(k);
+      drawSun(sunAt);
+      if (k < 1) sunAnim = requestAnimationFrame(frame);
+    };
+    sunAnim = requestAnimationFrame(frame);
   }
   function renderSteps() {
     stepsEl.innerHTML = STEPS.map((_, i) =>
